@@ -4,6 +4,7 @@ import {
   parseAccounts,
   parseChainId,
   walletErrorMessage,
+  type Eip1193Provider,
   type WalletDetail,
   type WalletInfo,
 } from './eip1193'
@@ -14,6 +15,7 @@ export interface WalletState {
   wallets: WalletInfo[]  // every wallet that announced itself
   status: WalletStatus
   wallet: WalletInfo | null  // the connected wallet
+  provider: Eip1193Provider | null // 27.4: the trading key asks it for one signature
   address: string | null  // lowercased
   chainId: number | null  // kept for 27.4: approveAgent names the chain
   error: string | null
@@ -168,6 +170,7 @@ export function useWallet(): WalletState {
     wallets: details.map((detail) => detail.info),
     status,
     wallet: active?.info ?? null,
+    provider: active?.provider ?? null,
     address,
     chainId,
     error,

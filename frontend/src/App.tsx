@@ -15,6 +15,7 @@ import SidebarViewSwitch, {
   type SidebarView,
 } from "./components/SidebarViewSwitch"
 import TraderDashboard from "./components/TraderDashboard"
+import TradingKeyPanel from "./components/TradingKeyPanel"
 import WalletButton from "./components/WalletButton"
 import {
   CLOSE_FILTER_LABELS,
@@ -35,6 +36,7 @@ import {
 } from "./features/markets/discovery"
 import { groupEntries } from "./features/markets/grouping"
 import { readTraderLocation, traderHref } from "./features/trader/url"
+import { TESTNET } from "./features/trading/client"
 import { useWallet } from "./features/wallet/useWallet"
 import { useNow } from "./hooks/useNow"
 import type { LeaderboardWindow } from "./types/leaderboard"
@@ -276,6 +278,15 @@ function App() {
         </div>
         <WalletButton wallet={wallet} onOpenDashboard={handleOpenMyDashboard} />
       </header>
+      {wallet.address !== null && wallet.provider !== null && (
+        <TradingKeyPanel
+          key={wallet.address}
+          network={TESTNET}
+          provider={wallet.provider}
+          master={wallet.address}
+          chainId={wallet.chainId}
+        />
+      )}
 
       <FeedTicker onSelectMarket={handleOpenMarketFromFeed} />
 

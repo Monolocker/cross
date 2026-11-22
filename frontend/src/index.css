@@ -1864,3 +1864,47 @@ button {
   font-size: 0.85rem;
   text-align: right;
 }
+
+
+/* Milestone 27.4: trading key (agent wallet) */
+.trading-key {
+  margin: -0.75rem 0 1.5rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+}
+
+.trading-key-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.trading-key-network {
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: #fff4d6;
+  color: #7a5200;
+  font-size: 0.75rem;
+}
+
+.trading-key-note,
+.trading-key-pending,
+.trading-key-message {
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+}
+
+.trading-key-pending code {
+  word-break: break-all;
+}
+
+.trading-key-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.trading-key-error {
+  text-align: left;
+}
