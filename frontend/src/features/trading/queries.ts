@@ -1,6 +1,6 @@
 import { skipToken, useQuery } from '@tanstack/react-query'
 import { postInfo, type Network } from './client'
-import { parseOutcomes } from './testnetMarkets'
+import { outcomeVolumes, parseOutcomes } from './testnetMarkets'
 import { availableBalances, bookTop } from './ticket'
 
 // Hyperliquid info queries made from the browser (Milestone 27.5),
@@ -13,6 +13,14 @@ export function useOutcomeList(network: Network) {
     staleTime: 5 * 60_000,
   })
 }
+
+export function useOutcomeVolumes(network: Network) {
+    return useQuery({
+      queryKey: ['hyperliquid', network.name, 'spotMetaAndAssetCtxs'],
+      queryFn: async () => outcomeVolumes(await postInfo(network, { type: 'spotMetaAndAssetCtxs' })),
+      staleTime: 60_000,
+    })
+  }
 
 export function useBookTop(network: Network, coin: string | null) {
   return useQuery({

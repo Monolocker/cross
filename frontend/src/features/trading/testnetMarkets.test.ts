@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { describeOutcome, parseOutcomes, searchOutcomes, sideName, templateFields } from './testnetMarkets'
+import { 
+    describeOutcome,
+    outcomeVolumes,
+    parseOutcomes,
+    searchOutcomes,
+    sideName,
+    templateFields,
+    trendingOutcomes, 
+} from './testnetMarkets'
 
 // Milestone 27.5: shapes taken from the 27.5 testnet probe.
 const META = {
@@ -62,3 +70,39 @@ describe('testnet outcomes', () => {
     expect(searchOutcomes(outcomes, '10219').map((o) => o.id)).toEqual([10219])
   })
 })
+
+describe('coins and trending (27.5b)', () => {
+    it('finds an outcome by either side\'s coin number', () => {
+      const outcomes = parseOutcomes(META)
+      for (const query of ['102190', '102191', '#102190', '#102191']) {
+        expect(searchOutcomes(outcomes, query).map((o) => o.id)).toEqual([10219])
+      }
+    })
+  
+    it('adds both sides\' 24h USDC volume per outcome, ignoring non-outcome coins', () => {
+      const response = [
+        { universe: [], tokens: [] },
+        [
+          { coin: '#102190', dayNtlVlm: '120.5' },
+          { coin: '#102191', dayNtlVlm: '79.5' },
+          { coin: '#102250', dayNtlVlm: '0.0' },
+          { coin: 'PURR/USDC', dayNtlVlm: '99999' },
+          { coin: '#201150', dayNtlVlm: 'bad' },
+        ],
+      ]
+      const volumes = outcomeVolumes(response)
+      expect(volumes.get(10219)).toBe(200)
+      expect(volumes.get(10225)).toBe(0)
+      expect(volumes.has(20115)).toBe(false)
+      expect(volumes.size).toBe(2)
+      expect(outcomeVolumes(null).size).toBe(0)
+    })
+  
+    it('ranks trending outcomes by volume, leaving out those with none', () => {
+      const outcomes = parseOutcomes(META)
+      const volumes = new Map([[10219, 200], [10225, 0], [20115, 900]])
+      expect(trendingOutcomes(outcomes, volumes).map((o) => o.id)).toEqual([20115, 10219])
+      expect(trendingOutcomes(outcomes, volumes, 1).map((o) => o.id)).toEqual([20115])
+      expect(trendingOutcomes(outcomes, new Map())).toEqual([])
+    })
+  })

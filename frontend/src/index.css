@@ -1931,13 +1931,25 @@ button {
 }
 
 .order-ticket-results {
-  max-height: 260px;
+  max-height: 300px;
   overflow-y: auto;
   margin: 0 0 0.5rem;
-  padding: 0;
-  list-style: none;
   border: 1px solid #eee;
   border-radius: 6px;
+}
+
+.order-ticket-results ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.order-ticket-results-heading {
+  margin: 0;
+  padding: 0.35rem 0.5rem;
+  color: #666;
+  font-size: 0.8rem;
+  border-bottom: 1px solid #eee;
 }
 
 .order-ticket-results button {

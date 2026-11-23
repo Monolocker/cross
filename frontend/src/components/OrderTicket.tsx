@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { Network } from '../features/trading/client'
-import { useAvailableBalances, useBookTop, useOutcomeList } from '../features/trading/queries'
-import { searchOutcomes } from '../features/trading/testnetMarkets'
+import { useAvailableBalances, useBookTop, useOutcomeList, useOutcomeVolumes } from '../features/trading/queries'
+import { searchOutcomes, trendingOutcomes } from '../features/trading/testnetMarkets'
 import { checkTicket, type TicketTif } from '../features/trading/ticket'
 
 interface OrderTicketProps {
@@ -15,8 +15,10 @@ interface OrderTicketProps {
 // signed or sent; 27.6 adds that.
 function OrderTicket({ network, master }: OrderTicketProps) {
   const outcomes = useOutcomeList(network)
+  const volumes = useOutcomeVolumes(network)
   const balances = useAvailableBalances(network, master)
   const [query, setQuery] = useState('')
+  const [searching, setSearching] = useState(false)  // the search box has focus
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [side, setSide] = useState<0 | 1>(0)
   const [isBuy, setIsBuy] = useState(true)
@@ -27,10 +29,18 @@ function OrderTicket({ network, master }: OrderTicketProps) {
   const selected = outcomes.data?.find((outcome) => outcome.id === selectedId) ?? null
   const encoding = selected === null ? null : 10 * selected.id + side
   const book = useBookTop(network, encoding === null ? null : `#${encoding}`)
-  const matches = useMemo(
-    () => (query.trim() === '' || outcomes.data === undefined ? [] : searchOutcomes(outcomes.data, query)),
-    [outcomes.data, query],
-  )
+  // Typing searches; an empty, focused box shows the busiest outcomes.
+  const trending = query.trim() === ''
+  const matches = useMemo(() => {
+    if (outcomes.data === undefined) {
+      return []
+    }
+    if (!trending) {
+      return searchOutcomes(outcomes.data, query)
+    }
+    return volumes.data === undefined ? [] : trendingOutcomes(outcomes.data, volumes.data)
+  }, [outcomes.data, volumes.data, query, trending])
+  const showList = searching && matches.length > 0
 
   const availableUsdc = balances.data?.get('USDC') ?? (balances.data === undefined ? null : 0)
   const heldContracts = encoding === null || balances.data === undefined ? null : balances.data.get(`+${encoding}`) ?? 0
@@ -45,8 +55,14 @@ function OrderTicket({ network, master }: OrderTicketProps) {
   function choose(id: number) {
     setSelectedId(id)
     setQuery('')
+    setSearching(false)
     setSide(0)
     setPrice('')
+  }
+
+  function volumeLabel(id: number): string {
+    const volume = volumes.data?.get(id)
+    return volume === undefined ? '' : ` · 24h ${volume.toLocaleString(undefined, { maximumFractionDigits: 0 })} USDC`
   }
 
   return (
@@ -60,22 +76,45 @@ function OrderTicket({ network, master }: OrderTicketProps) {
       <input
         type="search"
         className="order-ticket-search"
-        placeholder={outcomes.isPending ? 'Loading testnet outcomes…' : 'Search testnet outcomes (e.g. France, BTC, 102190)'}
+        placeholder={outcomes.isPending ? 'Loading testnet outcomes…' : 'Search testnet outcomes'}
         value={query}
-        onChange={(event) => setQuery(event.target.value)}
+        onChange={(event) => {
+          setQuery(event.target.value)
+          setSearching(true)
+        }}
+        onFocus={() => setSearching(true)}
+        onClick={() => setSearching(true)}
+        onBlur={() => setSearching(false)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            setSearching(false)
+          }
+        }}
       />
       {outcomes.isError && <p className="wallet-error trading-key-error" role="alert">Could not load testnet outcomes.</p>}
-      {matches.length > 0 && (
-        <ul className="order-ticket-results">
-          {matches.map((outcome) => (
-            <li key={outcome.id}>
-              <button type="button" onClick={() => choose(outcome.id)}>
-                <span>{outcome.label}</span>
-                <small>#{outcome.id} · {outcome.detail}</small>
-              </button>
-            </li>
-          ))}
-        </ul>
+      {searching && trending && volumes.isSuccess && matches.length === 0 && (
+        <p className="order-ticket-dry">
+          {volumes.data.size === 0
+            ? `${network.name} reported no 24h volumes for outcomes. Type to search.`
+            : `No ${network.name} outcome has traded in the last 24 hours. Type to search.`}
+        </p>
+      )}
+      {showList && (
+        // preventDefault keeps focus in the search box, so a click on a
+        // result lands before the box's blur hides the list.
+        <div className="order-ticket-results" onMouseDown={(event) => event.preventDefault()}>
+          {trending && <p className="order-ticket-results-heading">Trending on {network.name} (24h volume)</p>}
+          <ul>
+            {matches.map((outcome) => (
+              <li key={outcome.id}>
+                <button type="button" onClick={() => choose(outcome.id)}>
+                  <span>{outcome.label}</span>
+                  <small>#{outcome.id} · {outcome.detail}{volumeLabel(outcome.id)}</small>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {selected !== null && check !== null && (

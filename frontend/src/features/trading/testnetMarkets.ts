@@ -73,7 +73,11 @@ export interface TestnetOutcome {
         label,
         detail,
         sides,
-        search: `${item.outcome} ${label} ${detail} ${name} ${description}`.toLowerCase(),
+        // Also match the coins traders see ("#102190") and plain numbers.
+        search: [
+          item.outcome, `#${10 * item.outcome}`, `#${10 * item.outcome + 1}`,
+          10 * item.outcome, 10 * item.outcome + 1, label, detail, name, description,
+        ].join(' ').toLowerCase(),
       })
     }
     return outcomes
@@ -85,5 +89,30 @@ export interface TestnetOutcome {
     return outcomes
       .filter((outcome) => words.every((word) => outcome.search.includes(word)))
       .sort((a, b) => b.id - a.id)
+      .slice(0, limit)
+  }
+  
+  // spotMetaAndAssetCtxs -> 24h USDC volume per outcome (both sides added).
+  // Documented for spot pairs; the backend observed in M17.5 that outcome
+  // coins appear in it too, each with dayNtlVlm (USDC traded in 24h).
+  export function outcomeVolumes(response: unknown): Map<number, number> {
+    const contexts = Array.isArray(response) ? (response[1] as { coin?: unknown; dayNtlVlm?: unknown }[]) : null
+    const volumes = new Map<number, number>()
+    for (const context of Array.isArray(contexts) ? contexts : []) {
+      const match = typeof context.coin === 'string' ? /^#(\d+)$/.exec(context.coin) : null
+      const volume = Number(context.dayNtlVlm)
+      if (match !== null && Number.isFinite(volume)) {
+        const outcome = Math.floor(Number(match[1]) / 10)
+        volumes.set(outcome, (volumes.get(outcome) ?? 0) + volume)
+      }
+    }
+    return volumes
+  }
+  
+  // The busiest outcomes over 24h; outcomes with no volume are left out.
+  export function trendingOutcomes(outcomes: TestnetOutcome[], volumes: Map<number, number>, limit = 10): TestnetOutcome[] {
+    return outcomes
+      .filter((outcome) => (volumes.get(outcome.id) ?? 0) > 0)
+      .sort((a, b) => (volumes.get(b.id) ?? 0) - (volumes.get(a.id) ?? 0))
       .slice(0, limit)
   }
