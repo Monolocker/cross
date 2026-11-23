@@ -10,6 +10,8 @@ from typing import Any
 import httpx
 
 HYPERLIQUID_INFO_URL = "https://api.hyperliquid.xyz/info"
+# Testnet has its own markets and accounts (M27.b)
+HYPERLIQUID_TESTNET_INFO_URL = "https://api.hyperliquid-testnet.xyz/info"
 
 # Fail fast if HL is slow or unreachable
 # up to 5s to establish connection, 10s total for the request
@@ -29,8 +31,9 @@ class HyperliquidClient:
     across all requests for the lifetime of the application
     """
 
-    def __init__(self, http: httpx.AsyncClient) -> None:
+    def __init__(self, http: httpx.AsyncClient, info_url: str = HYPERLIQUID_INFO_URL) -> None:
         self._http = http
+        self._info_url = info_url
 
     async def fetch_outcome_meta(self) -> dict[str, Any]:
         """Fetch all live outcome markets, questions, and deployers.
@@ -259,7 +262,7 @@ class HyperliquidClient:
         """POST a request body to the info endpoint and return parsed JSON"""
         try:
             response = await self._http.post(
-                HYPERLIQUID_INFO_URL,
+                self._info_url,
                 json=body,
                 timeout=REQUEST_TIMEOUT,
 

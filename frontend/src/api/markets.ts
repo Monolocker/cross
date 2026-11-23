@@ -3,6 +3,7 @@ import type { CandleRange, PriceHistory } from '../types/candle'
 import type { DeployerStats } from '../types/deployer'
 import type { Feed } from '../types/feed'
 import type { Leaderboard, LeaderboardWindow } from '../types/leaderboard'
+import type { TestnetOutcomeRow } from '../types/testnet'
 import type { TraderDashboard } from '../types/trader'
 import type { ExecutionEstimate } from '../types/execution'
 import type {
@@ -161,6 +162,12 @@ export async function fetchDeployers(
 ): Promise<DeployerStats[]> {
   return requestJson<DeployerStats[]>('/deployers', 'deployers', signal)
 }
+
+// Testnet outcomes, titled by the backend (Milestone 27.7b).
+export async function fetchTestnetOutcomes(signal?: AbortSignal): Promise<TestnetOutcomeRow[]> {
+  return requestJson<TestnetOutcomeRow[]>('/testnet/outcomes', 'testnet outcomes', signal)
+}
+
 
 // Unified feed (Milestone 24.3).
 export async function fetchFeed(signal?: AbortSignal): Promise<Feed> {

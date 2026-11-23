@@ -4,7 +4,7 @@ import type { OrderAction } from '../features/trading/actions'
 import { readAgent } from '../features/trading/agentStore'
 import type { Network } from '../features/trading/client'
 import { placeOrder } from '../features/trading/orders'
-import { refreshAfterTrade, useAvailableBalances, useBookTop, useOutcomeList, useOutcomeVolumes } from '../features/trading/queries'
+import { refreshAfterTrade, useAvailableBalances, useBookTop, useOutcomeVolumes, useTestnetOutcomes } from '../features/trading/queries'
 import { searchOutcomes, trendingOutcomes } from '../features/trading/testnetMarkets'
 import { checkTicket, describeOrderResult, type TicketTif } from '../features/trading/ticket'
 import { walletErrorMessage } from '../features/wallet/eip1193'
@@ -21,7 +21,7 @@ interface OrderTicketProps {
 // action and it goes to testnet. Testnet funds have no value.
 function OrderTicket({ network, master }: OrderTicketProps) {
   const queryClient = useQueryClient()
-  const outcomes = useOutcomeList(network)
+  const outcomes = useTestnetOutcomes()
   const volumes = useOutcomeVolumes(network)
   const balances = useAvailableBalances(network, master)
   const [query, setQuery] = useState('')
@@ -135,7 +135,11 @@ function OrderTicket({ network, master }: OrderTicketProps) {
           }
         }}
       />
-      {outcomes.isError && <p className="wallet-error trading-key-error" role="alert">Could not load testnet outcomes.</p>}
+      {outcomes.isError && (
+        <p className="wallet-error trading-key-error" role="alert">
+          Could not load testnet outcomes from the backend: {outcomes.error.message}
+        </p>
+      )}
       {searching && trending && volumes.isSuccess && matches.length === 0 && (
         <p className="order-ticket-dry">
           {volumes.data.size === 0
@@ -153,7 +157,7 @@ function OrderTicket({ network, master }: OrderTicketProps) {
               <li key={outcome.id}>
                 <button type="button" onClick={() => choose(outcome.id)}>
                   <span>{outcome.label}</span>
-                  <small>#{outcome.id} · {outcome.detail}{volumeLabel(outcome.id)}</small>
+                  <small>#{outcome.id}{outcome.detail !== '' && ` · ${outcome.detail}`}{volumeLabel(outcome.id)}</small>
                 </button>
               </li>
             ))}
@@ -164,7 +168,8 @@ function OrderTicket({ network, master }: OrderTicketProps) {
       {selected !== null && check !== null && (
         <div className="order-ticket-form">
           <p className="order-ticket-market">
-            <strong>{selected.label}</strong> <small>outcome {selected.id} · {selected.detail}</small>
+          <strong>{selected.label}</strong>{' '}
+          <small>outcome {selected.id}{selected.detail !== '' && ` · ${selected.detail}`}</small>
           </p>
 
           <div className="order-ticket-row" role="group" aria-label="Side">

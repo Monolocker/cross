@@ -27,6 +27,7 @@ from app.models.costs import ExecutionEstimate, VenueCost
 from app.models.feed import Feed
 from app.models.leaderboard import Leaderboard, LeaderboardWindow
 from app.models.market import OutcomeMarket, OutcomeMarketDetail
+from app.models.testnet import TestnetOutcome
 from app.models.trader import TraderDashboard
 from app.models.venue import (
     ElsewhereEntry,
@@ -56,7 +57,8 @@ from app.services.leaderboard import WindowResult, build_leaderboard, compute_wi
 from app.services.trader_dashboard import build_orders, build_positions, compute_stored, side_index
 from app.services.traders import TraderStore
 from app.services.sweep import BookSweeper
-from app.services.hyperliquid import HyperliquidClient, HyperliquidError
+from app.services.hyperliquid import HYPERLIQUID_TESTNET_INFO_URL, HyperliquidClient, HyperliquidError
+from app.services.testnet import testnet_outcomes
 from app.services.normalize import (
     MarketData,
     TopOfBook,
@@ -157,6 +159,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.started_at = time.monotonic()
     app.state.http = httpx.AsyncClient()
     app.state.hyperliquid = HyperliquidClient(app.state.http)
+    # Testnet info, for the order ticket's market list (27.7b)
+    app.state.hyperliquid_testnet = HyperliquidClient(app.state.http, HYPERLIQUID_TESTNET_INFO_URL)
     # Other venues (M22), sharing the same connection pool
     app.state.polymarket = PolymarketClient(app.state.http)
     app.state.kalshi = KalshiClient(app.state.http)
@@ -928,6 +932,35 @@ async def venue_lookup(
 # computed at most once per TTL, off the event loop, and every sort and
 # limit is served from that one result.
 LEADERBOARD_TTL_SECONDS = 60.0
+
+# Testnet markets change rarely; one refresh costs weight 40
+# (outcomeMeta 20 + outcomeTemplates 20) against testnet's own budget.
+TESTNET_OUTCOMES_TTL_SECONDS = 300.0
+
+
+@app.get("/testnet/outcomes")
+async def testnet_outcome_list() -> list[TestnetOutcome]:
+    """Testnet outcomes with mainnet-quality titles (Milestone 27.7b).
+
+    Read-only metadata only. Orders never pass through this backend:
+    the browser signs and sends them to Hyperliquid itself.
+    """
+    client: HyperliquidClient = app.state.hyperliquid_testnet
+
+    async def load() -> list[TestnetOutcome]:
+        meta = await client.fetch_outcome_meta()
+        try:
+            templates = await client.fetch_outcome_templates()
+        except HyperliquidError as exc:
+            # Titles then fall back to the raw description, as on mainnet.
+            logger.warning("Testnet templates unavailable: %s", exc)
+            templates = []
+        return testnet_outcomes(meta, templates)
+
+    try:
+        return await cached_input(("hyperliquid-testnet", "outcomes"), TESTNET_OUTCOMES_TTL_SECONDS, load)
+    except HyperliquidError as exc:
+        raise HTTPException(status_code=502, detail=f"Testnet unavailable: {exc}") from exc
 
 
 @app.get("/leaderboard")

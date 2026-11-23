@@ -1,20 +1,22 @@
 import { skipToken, useQuery, type QueryClient } from '@tanstack/react-query'
+import { fetchTestnetOutcomes } from '../../api/markets'
 import { postInfo, type Network } from './client'
 import { parseOpenOutcomeOrders} from './orders'
-import { outcomeVolumes, parseOutcomes } from './testnetMarkets'
+import { outcomeVolumes, toTestnetOutcomes } from './testnetMarkets'
 import { availableBalances, bookTop } from './ticket'
 
 // Hyperliquid info queries made from the browser (Milestone 27.5),
 // cached by TanStack Query like the rest of the app's data.
 
-export function useOutcomeList(network: Network) {
-  return useQuery({
-    queryKey: ['hyperliquid', network.name, 'outcomeMeta'],
-    queryFn: async () => parseOutcomes(await postInfo(network, { type: 'outcomeMeta' })),
-    staleTime: 5 * 60_000,
-  })
-}
-
+// Testnet's market list comes from OUR backend, which titles it with
+// the same code as mainnet (27.7b). Only metadata: no orders go there.
+export function useTestnetOutcomes() {
+    return useQuery({
+      queryKey: ['backend', 'testnetOutcomes'],
+      queryFn: async ({ signal }) => toTestnetOutcomes(await fetchTestnetOutcomes(signal)),
+      staleTime: 5 * 60_000,
+    })
+  }
 export function useOutcomeVolumes(network: Network) {
     return useQuery({
       queryKey: ['hyperliquid', network.name, 'spotMetaAndAssetCtxs'],
