@@ -167,9 +167,13 @@ describe('agent checks', () => {
 
   it('tests the key with a cancel signed by the agent', async () => {
     const { actionHash, l1TypedData, testAgentWithCancel, TESTNET } = await load()
+    // The exact answer live testnet gave on 2026-11-22 (27.4 verification).
     const calls = fakeFetch({
       status: 'ok',
-      response: { type: 'cancel', data: { statuses: [{ error: 'Order was never placed, already canceled, or filled.' }] } },
+      response: {
+        type: 'cancel',
+        data: { statuses: [{ error: 'Order was never placed, already canceled, or filled. asset=0' }] },
+      },
     })
     const agent = { privateKey: AGENT_KEY, address: AGENT as `0x${string}`, name: 'cross', approvedAt: 0 }
     expect(await testAgentWithCancel(TESTNET, agent)).toMatch(/accepted the signature/)
@@ -188,6 +192,16 @@ describe('agent checks', () => {
     await expect(testAgentWithCancel(TESTNET, agent)).rejects.toThrow('does not exist')
     fakeFetch({ status: 'ok', response: { type: 'cancel', data: { statuses: ['success'] } } })
     await expect(testAgentWithCancel(TESTNET, agent)).rejects.toThrow('Unexpected answer')
+  })
+
+  it('also accepts the bare text the docs show', async () => {
+    const { testAgentWithCancel, TESTNET } = await load()
+    const agent = { privateKey: AGENT_KEY, address: AGENT as `0x${string}`, name: 'cross', approvedAt: 0 }
+    fakeFetch({
+      status: 'ok',
+      response: { type: 'cancel', data: { statuses: [{ error: 'Order was never placed, already canceled, or filled.' }] } },
+    })
+    expect(await testAgentWithCancel(TESTNET, agent)).toMatch(/accepted the signature/)
   })
 })
 

@@ -13,6 +13,8 @@ import { approveAgentTypedData, exchangeBody, signL1Action, splitSignature } fro
 // unnamed agent another app uses on this account.
 export const AGENT_NAME = 'cross'
 
+// The docs show this text alone; live testnet appends details
+// (" asset=0"), so it matches as a prefix 
 const NEVER_PLACED = 'Order was never placed, already canceled, or filled.'
 
 // eth_signTypedData_v4 needs the domain's own type spelled out (viem
@@ -99,7 +101,7 @@ export async function testAgentWithCancel(network: Network, agent: StoredAgent):
   const result = await postExchange(network, exchangeBody(action, nonce, signature))
   const statuses = (result.response.data as { statuses?: unknown[] } | undefined)?.statuses
   const first = statuses?.[0] as { error?: unknown } | string | undefined
-  if (typeof first === 'object' && first.error === NEVER_PLACED) {
+  if (typeof first === 'object' && typeof first.error === 'string' && first.error.startsWith(NEVER_PLACED)) {
     return 'Hyperliquid accepted the signature and recognized the key. Nothing was canceled.'
   }
   throw new Error(`Unexpected answer: ${JSON.stringify(result.response)}`)
