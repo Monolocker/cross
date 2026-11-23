@@ -1908,3 +1908,105 @@ button {
 .trading-key-error {
   text-align: left;
 }
+
+
+/* Milestone 27.5: dry-run order ticket (testnet) */
+.order-ticket {
+  margin: 0 0 1.5rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+}
+
+.order-ticket-dry {
+  color: #666;
+  font-size: 0.8rem;
+}
+
+.order-ticket-search {
+  width: 100%;
+  margin: 0.5rem 0;
+  padding: 0.4rem 0.5rem;
+  box-sizing: border-box;
+}
+
+.order-ticket-results {
+  max-height: 260px;
+  overflow-y: auto;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  list-style: none;
+  border: 1px solid #eee;
+  border-radius: 6px;
+}
+
+.order-ticket-results button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid #eee;
+  border-radius: 0;
+  background: none;
+  text-align: left;
+}
+
+.order-ticket-results small,
+.order-ticket-market small {
+  color: #666;
+}
+
+.order-ticket-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.order-ticket-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.85rem;
+}
+
+.order-ticket-row button[aria-pressed='true'] {
+  border-color: #333;
+  font-weight: 600;
+}
+
+.order-ticket-gap {
+  flex: 0 0 1rem;
+}
+
+.order-ticket-book,
+.order-ticket-funds {
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+}
+
+.order-ticket-quote {
+  padding: 0 0.3rem;
+  font-size: 0.85rem;
+}
+
+.order-ticket-errors {
+  margin: 0.5rem 0;
+  color: #b00020;
+  font-size: 0.9rem;
+}
+
+.order-ticket-notes {
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+}
+
+.order-ticket-preview pre {
+  overflow-x: auto;
+  padding: 0.5rem;
+  background: #f6f6f6;
+  border-radius: 6px;
+  font-size: 0.8rem;
+}

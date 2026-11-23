@@ -14,6 +14,7 @@ import MarketSort from "./components/MarketSort"
 import SidebarViewSwitch, {
   type SidebarView,
 } from "./components/SidebarViewSwitch"
+import OrderTicket from "./components/OrderTicket"
 import TraderDashboard from "./components/TraderDashboard"
 import TradingKeyPanel from "./components/TradingKeyPanel"
 import WalletButton from "./components/WalletButton"
@@ -287,6 +288,7 @@ function App() {
           chainId={wallet.chainId}
         />
       )}
+      {wallet.address !== null && <OrderTicket key={wallet.address} network={TESTNET} master={wallet.address} />}
 
       <FeedTicker onSelectMarket={handleOpenMarketFromFeed} />
 
