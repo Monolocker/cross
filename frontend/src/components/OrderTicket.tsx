@@ -1,19 +1,26 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
+import type { OrderAction } from '../features/trading/actions'
+import { readAgent } from '../features/trading/agentStore'
 import type { Network } from '../features/trading/client'
-import { useAvailableBalances, useBookTop, useOutcomeList, useOutcomeVolumes } from '../features/trading/queries'
+import { placeOrder, type OrderResult } from '../features/trading/orders'
+import { refreshAfterTrade, useAvailableBalances, useBookTop, useOutcomeList, useOutcomeVolumes } from '../features/trading/queries'
 import { searchOutcomes, trendingOutcomes } from '../features/trading/testnetMarkets'
 import { checkTicket, type TicketTif } from '../features/trading/ticket'
+import { walletErrorMessage } from '../features/wallet/eip1193'
+import OpenOrders from './OpenOrders'
 
 interface OrderTicketProps {
   network: Network
   master: string
 }
 
-// Milestone 27.5: a DRY-RUN order ticket on testnet. It reads testnet
-// markets and your testnet balances straight from Hyperliquid, checks
-// the order and shows the exact action that would be signed. Nothing is
-// signed or sent; 27.6 adds that.
+// Milestone 27.5/27.6: the testnet order ticket. It reads testnet
+// markets and balances straight from Hyperliquid, checks the order and
+// shows the exact action. Review, then Send: the trading key signs THAT
+// action and it goes to testnet. Testnet funds have no value.
 function OrderTicket({ network, master }: OrderTicketProps) {
+  const queryClient = useQueryClient()
   const outcomes = useOutcomeList(network)
   const volumes = useOutcomeVolumes(network)
   const balances = useAvailableBalances(network, master)
@@ -25,6 +32,10 @@ function OrderTicket({ network, master }: OrderTicketProps) {
   const [price, setPrice] = useState('')
   const [size, setSize] = useState('')
   const [tif, setTif] = useState<TicketTif>('Gtc')
+  const [reviewed, setReviewed] = useState<OrderAction | null>(null)  // what Send will sign
+  const [sending, setSending] = useState(false)
+  const [sendResult, setSendResult] = useState<string | null>(null)
+  const [sendError, setSendError] = useState<string | null>(null)
 
   const selected = outcomes.data?.find((outcome) => outcome.id === selectedId) ?? null
   const encoding = selected === null ? null : 10 * selected.id + side
@@ -52,6 +63,44 @@ function OrderTicket({ network, master }: OrderTicketProps) {
         { availableUsdc, heldContracts },
       )
 
+  // The confirmation shows only while the inputs still build exactly the
+  // reviewed action, so what you confirm is what is signed.
+  const confirming = reviewed !== null && check !== null && check.action !== null
+    && JSON.stringify(reviewed) === JSON.stringify(check.action)
+
+  function describeResult(result: OrderResult): string {
+    if (result.kind === 'resting') {
+      return `Resting on ${network.name}: order ${result.oid}. It stays until filled or canceled (see your open orders).`
+    }
+    if (result.kind === 'filled') {
+      return `Filled ${result.totalSz} at an average of ${result.avgPx} (order ${result.oid}).`
+    }
+    return `Hyperliquid rejected the order: ${result.message}`
+  }
+
+  async function send() {
+    if (reviewed === null) {
+      return
+    }
+    const agent = readAgent(network, master)
+    if (agent === null) {
+      setSendError('Approve a trading key above first.')
+      return
+    }
+    setSending(true)
+    setSendResult(null)
+    setSendError(null)
+    try {
+      setSendResult(describeResult(await placeOrder(network, agent, reviewed)))
+      setReviewed(null)
+    } catch (exc) {
+      setSendError(walletErrorMessage(exc))
+    } finally {
+      setSending(false)
+      refreshAfterTrade(queryClient, network)
+    }
+  }
+
   function choose(id: number) {
     setSelectedId(id)
     setQuery('')
@@ -70,7 +119,7 @@ function OrderTicket({ network, master }: OrderTicketProps) {
       <div className="trading-key-heading">
         <strong>Order ticket</strong>
         <span className="trading-key-network">{network.name}</span>
-        <span className="order-ticket-dry">Dry run: nothing is signed or sent</span>
+        <span className="order-ticket-dry">Orders are real on {network.name}, with test funds</span>
       </div>
 
       <input
@@ -194,8 +243,33 @@ function OrderTicket({ network, master }: OrderTicketProps) {
               <pre>{JSON.stringify(check.action, null, 2)}</pre>
             </details>
           )}
+
+          {check.action !== null && !confirming && (
+            <button type="button" disabled={sending} onClick={() => setReviewed(check.action)}>
+              Review order
+            </button>
+          )}
+          {confirming && (
+            <div className="order-ticket-confirm" role="group" aria-label="Confirm order">
+              <p>
+                {isBuy ? 'Buy' : 'Sell'} <strong>{size}</strong> {selected.sides[side]} at <strong>{price}</strong>{' '}
+                ({tif === 'Gtc' ? 'GTC' : 'IOC'}) on <strong>{selected.label}</strong>, {network.name}.
+                {check.notional !== null && ` Order value ${check.notional.toFixed(2)} USDC.`}
+              </p>
+              <button type="button" disabled={sending} onClick={() => void send()}>
+                {sending ? 'Sending…' : `Send to ${network.name}`}
+              </button>
+              <button type="button" className="wallet-secondary" disabled={sending} onClick={() => setReviewed(null)}>
+                Back
+              </button>
+            </div>
+          )}
+          {sendResult !== null && <p className="trading-key-message" role="status">{sendResult}</p>}
+          {sendError !== null && <p className="wallet-error trading-key-error" role="alert">{sendError}</p>}
         </div>
       )}
+
+      <OpenOrders network={network} master={master} outcomes={outcomes.data} />
     </section>
   )
 }

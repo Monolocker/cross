@@ -2022,3 +2022,46 @@ button {
   border-radius: 6px;
   font-size: 0.8rem;
 }
+
+
+/* Milestone 27.6: sending orders, open orders */
+.order-ticket-confirm {
+  margin: 0.5rem 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #e0c36a;
+  border-radius: 6px;
+  background: #fffaf0;
+}
+
+.order-ticket-confirm p {
+  margin: 0 0 0.5rem;
+}
+
+.order-ticket-confirm button {
+  margin-right: 0.5rem;
+}
+
+.open-orders {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #eee;
+}
+
+.open-orders ul {
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.open-orders li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  font-size: 0.9rem;
+}
+
+.open-orders small {
+  color: #666;
+}
