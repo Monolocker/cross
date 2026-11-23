@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { availableBalances, bookTop, checkTicket, type TicketInput } from './ticket'
+import { availableBalances, bookTop, checkTicket, describeOrderResult, type TicketInput } from './ticket'
 
 // Milestone 27.5: ticket rules. The book is #102190's from the 27.5
 // testnet probe: bid 0.55263 x 30, ask 0.70526 x 22.
@@ -106,3 +106,33 @@ describe('parsers', () => {
     expect(availableBalances(undefined).size).toBe(0)
   })
 })
+
+
+describe('live testnet answers (2026-11-23)', () => {
+    it('blocks orders worth less than 1 USDC, as testnet did', () => {
+      // Order A1: 2 contracts at 0.1 was answered "Order must have minimum value of 1 USDC."
+      const tooSmall = checkTicket({ ...BUY, price: '0.1', size: '2' }, BOOK, FUNDS)
+      expect(tooSmall.errors[0]).toMatch(/at least 1 USDC .*this one is 0.20/)
+      expect(tooSmall.action).toBeNull()
+      expect(checkTicket({ ...BUY, price: '0.1', size: '10' }, BOOK, FUNDS).errors).toEqual([])  // exactly 1
+      expect(checkTicket({ ...BUY, price: '0.1', size: '100' }, BOOK, FUNDS).errors).toEqual([])  // order A2 rested
+      const smallSell = { ...BUY, isBuy: false, price: '0.5', size: '1' }
+      expect(checkTicket(smallSell, BOOK, { ...FUNDS, heldContracts: 1 }).errors[0]).toMatch(/at least 1 USDC/)
+    })
+  
+    it('describes a partial IOC fill, as order B was', () => {
+      const result = { kind: 'filled' as const, oid: 65846827721, totalSz: '50.0', avgPx: '0.71579' }
+      expect(describeOrderResult(result, '100', 'Testnet')).toBe(
+        'Filled 50 of 100 at an average of 0.71579 (order 65846827721). The other 50 were canceled: IOC never rests.',
+      )
+    })
+  
+    it('describes a complete fill, a resting order and a rejection', () => {
+      expect(describeOrderResult({ kind: 'filled', oid: 65846933309, totalSz: '42.0', avgPx: '0.53684' }, '42', 'Testnet'))
+        .toBe('Filled 42 at an average of 0.53684 (order 65846933309).')
+      expect(describeOrderResult({ kind: 'resting', oid: 65846762597 }, '100', 'Testnet'))
+        .toMatch(/^Resting on Testnet: order 65846762597\./)
+      expect(describeOrderResult({ kind: 'error', message: 'Order must have minimum value of 1 USDC. asset=100102190' }, '2', 'Testnet'))
+        .toBe('Hyperliquid rejected the order: Order must have minimum value of 1 USDC. asset=100102190')
+    })
+  })

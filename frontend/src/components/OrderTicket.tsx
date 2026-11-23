@@ -3,10 +3,10 @@ import { useMemo, useState } from 'react'
 import type { OrderAction } from '../features/trading/actions'
 import { readAgent } from '../features/trading/agentStore'
 import type { Network } from '../features/trading/client'
-import { placeOrder, type OrderResult } from '../features/trading/orders'
+import { placeOrder } from '../features/trading/orders'
 import { refreshAfterTrade, useAvailableBalances, useBookTop, useOutcomeList, useOutcomeVolumes } from '../features/trading/queries'
 import { searchOutcomes, trendingOutcomes } from '../features/trading/testnetMarkets'
-import { checkTicket, type TicketTif } from '../features/trading/ticket'
+import { checkTicket, describeOrderResult, type TicketTif } from '../features/trading/ticket'
 import { walletErrorMessage } from '../features/wallet/eip1193'
 import OpenOrders from './OpenOrders'
 
@@ -68,16 +68,6 @@ function OrderTicket({ network, master }: OrderTicketProps) {
   const confirming = reviewed !== null && check !== null && check.action !== null
     && JSON.stringify(reviewed) === JSON.stringify(check.action)
 
-  function describeResult(result: OrderResult): string {
-    if (result.kind === 'resting') {
-      return `Resting on ${network.name}: order ${result.oid}. It stays until filled or canceled (see your open orders).`
-    }
-    if (result.kind === 'filled') {
-      return `Filled ${result.totalSz} at an average of ${result.avgPx} (order ${result.oid}).`
-    }
-    return `Hyperliquid rejected the order: ${result.message}`
-  }
-
   async function send() {
     if (reviewed === null) {
       return
@@ -91,9 +81,14 @@ function OrderTicket({ network, master }: OrderTicketProps) {
     setSendResult(null)
     setSendError(null)
     try {
-      setSendResult(describeResult(await placeOrder(network, agent, reviewed)))
-      setReviewed(null)
-    } catch (exc) {
+        const requested = reviewed.orders[0].s
+        const result = await placeOrder(network, agent, reviewed)
+        setSendResult(describeOrderResult(result, requested, network.name))
+        setReviewed(null)
+        if (result.kind !== 'error') {
+          setSize('')  // a stale size would raise errors against the new balance
+        }
+      } catch (exc) {
       setSendError(walletErrorMessage(exc))
     } finally {
       setSending(false)

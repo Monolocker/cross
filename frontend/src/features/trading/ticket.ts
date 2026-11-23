@@ -1,14 +1,17 @@
 import { limitOrder, orderAction, type OrderAction } from './actions'
+import type { OrderResult } from './orders'
 import { outcomeAsset } from './wire'
 
-// Order ticket rules (Milestone 27.5). The docs give no tick, lot or
-// minimum for outcomes; these rules come from the 27.1 probe:
-//   prices: 630 live book levels, all strictly between 0 and 1, with
-//           at most 5 decimals (0.00001 .. 0.99999);
-//   sizes:  2,134,687 fills and every book level in whole contracts.
-// The minimum order value is still unknown (resting orders worth
-// 1.18 USDC exist), so it is not enforced: the first testnet order
-// will show Hyperliquid's own answer.
+// Order ticket rules (Milestone 27.5, minimum added in 27.7). The docs
+// give no tick, lot or minimum for outcomes; these come from evidence:
+//   prices:  27.1 probe, 630 live book levels, all strictly between 0
+//            and 1, with at most 5 decimals (0.00001 .. 0.99999);
+//   sizes:   27.1 probe, 2,134,687 fills and every book level in whole
+//            contracts;
+//   minimum: testnet, 2026-11-23, a 0.20 USDC order was answered "Order
+//            must have minimum value of 1 USDC. asset=100102190", and
+//            a 10 USDC order rested. The 27.1 mainnet probe's smallest
+//            resting order was 1.18 USDC, which fits the same rule.
 
 export type TicketTif = 'Gtc' | 'Ioc'
 
@@ -42,6 +45,7 @@ export interface TicketCheck {
 const DECIMAL = /^(0|[1-9]\d*)(\.\d+)?$/
 const WHOLE = /^[1-9]\d*$/
 const MAX_PRICE_DECIMALS = 5
+export const MIN_ORDER_VALUE = 1    // 1 USDC 
 
 function priceDecimals(price: string): number {
   return (price.split('.')[1] ?? '').replace(/0+$/, '').length
@@ -70,6 +74,11 @@ export function checkTicket(input: TicketInput, book: BookTop | null, funds: Fun
   const price = Number(input.price)
   const size = Number(input.size)
   const notional = priceOk && sizeOk ? price * size : null
+
+  // Rounded to a millionth so 0.1 x 10 counts as exactly 1.
+  if (notional !== null && Math.round(notional * 1e6) / 1e6 < MIN_ORDER_VALUE) {
+    errors.push(`Order value must be at least ${MIN_ORDER_VALUE} USDC (Hyperliquid's minimum); this one is ${notional.toFixed(2)}.`)
+  }
 
   if (notional !== null && input.isBuy) {
     if (funds.availableUsdc === null) {
@@ -114,6 +123,27 @@ export function checkTicket(input: TicketInput, book: BookTop | null, funds: Fun
     : null
   return { errors, notes, notional, action }
 }
+
+// What to tell the user after Send. A filled IOC can be partial: the
+// response gives the size filled (e.g. "50.0" of 100), and the rest of
+// an IOC order is canceled, as testnet showed on 2026-11-23.
+export function describeOrderResult(result: OrderResult, requestedSize: string, networkName: string): string {
+    if (result.kind === 'resting') {
+      return `Resting on ${networkName}: order ${result.oid}. It stays until filled or canceled (see your open orders).`
+    }
+    if (result.kind === 'error') {
+      return `Hyperliquid rejected the order: ${result.message}`
+    }
+    const filled = Number(result.totalSz)
+    const requested = Number(requestedSize)
+    if (filled < requested) {
+      return `Filled ${filled} of ${requested} at an average of ${result.avgPx} (order ${result.oid}). `
+        + `The other ${requested - filled} were canceled: IOC never rests.`
+    }
+    return `Filled ${filled} at an average of ${result.avgPx} (order ${result.oid}).`
+  }
+  
+  // l2Book levels -> BookTop. levels[0] are bids (best first), levels[1] asks.
 
 // l2Book levels -> BookTop. levels[0] are bids (best first), levels[1] asks.
 export function bookTop(book: unknown): BookTop | null {

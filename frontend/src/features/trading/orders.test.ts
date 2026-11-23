@@ -37,9 +37,17 @@ describe('order statuses (docs examples)', () => {
       .toEqual({ kind: 'filled', oid: 77747314, totalSz: '0.02', avgPx: '1891.4' })
     expect(parseOrderStatus({ error: 'Order must have minimum value of $10.' }))
       .toEqual({ kind: 'error', message: 'Order must have minimum value of $10.' })
-    expect(parseOrderStatus(undefined).kind).toBe('error')
+      expect(parseOrderStatus(undefined).kind).toBe('error')
+    })
+  
+    it('reads the live testnet answers from 2026-11-23', () => {
+      expect(parseOrderStatus({ error: 'Order must have minimum value of 1 USDC. asset=100102190' }))
+        .toEqual({ kind: 'error', message: 'Order must have minimum value of 1 USDC. asset=100102190' })
+      expect(parseOrderStatus({ filled: { totalSz: '50.0', avgPx: '0.71579', oid: 65846827721 } }))
+        .toEqual({ kind: 'filled', oid: 65846827721, totalSz: '50.0', avgPx: '0.71579' })
+      expect(parseOrderStatus({ resting: { oid: 65846762597 } })).toEqual({ kind: 'resting', oid: 65846762597 })
+    })
   })
-})
 
 describe('placeOrder', () => {
   it('sends exactly the reviewed action, signed by the agent for testnet', async () => {
