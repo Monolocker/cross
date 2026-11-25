@@ -7,7 +7,7 @@ import { placeOrder } from '../features/trading/orders'
 import type { OutcomePosition } from '../features/trading/positions'
 import { refreshAfterTrade, useAvailableBalances, useBookTop, useOutcomeVolumes, useTestnetOutcomes } from '../features/trading/queries'
 import { searchOutcomes, trendingOutcomes } from '../features/trading/testnetMarkets'
-import { checkTicket, describeOrderResult, MARKET_SLIPPAGE, type OrderKind, type TicketTif } from '../features/trading/ticket'
+import { checkTicket, describeOrderResult, SUGGESTED_SLIPPAGE, type OrderKind, type TicketTif } from '../features/trading/ticket'
 import { walletErrorMessage } from '../features/wallet/eip1193'
 import OpenOrders from './OpenOrders'
 import Positions from './Positions'
@@ -37,6 +37,9 @@ function OrderTicket({ network, master }: OrderTicketProps) {
   const [price, setPrice] = useState('')
   const [size, setSize] = useState('')
   const [tif, setTif] = useState<TicketTif>('Gtc')
+  // Empty until the user chooses: the ticket suggests 0.05 but does not 
+  // pick it for the user. Kept across orders once chosen 
+  const [slippage, setSlippage] = useState('')
   const [reviewed, setReviewed] = useState<OrderAction | null>(null)  // what Send will sign
   const [sending, setSending] = useState(false)
   const [sendResult, setSendResult] = useState<string | null>(null)
@@ -63,7 +66,7 @@ function OrderTicket({ network, master }: OrderTicketProps) {
   const check = selected === null
     ? null
     : checkTicket(
-        { outcomeId: selected.id, side, isBuy, kind, price, size, tif },
+        { outcomeId: selected.id, side, isBuy, kind, price, size, tif, slippage },
         book.data ?? null,
         { availableUsdc, heldContracts },
       )
@@ -81,7 +84,7 @@ function OrderTicket({ network, master }: OrderTicketProps) {
     }
     const agent = readAgent(network, master)
     if (agent === null) {
-      setSendError('Approve a trading key above first.')
+      setSendError('Approve a trading key in Settings first.')
       return
     }
     setSending(true)
@@ -242,11 +245,22 @@ function OrderTicket({ network, master }: OrderTicketProps) {
                 <input inputMode="decimal" value={price} onChange={(event) => setPrice(event.target.value.trim())} placeholder="0.42" />
               </label>
             ) : (
-              <label>
-                Worst price
-                <input readOnly value={check.price ?? '—'} title={`Best ${isBuy ? 'ask +' : 'bid -'} ${MARKET_SLIPPAGE}`} />
-              </label>
-            )}
+                <>
+                  <label>
+                    Slippage ({isBuy ? '+' : '−'})
+                    <input
+                      inputMode="decimal"
+                      value={slippage}
+                      onChange={(event) => setSlippage(event.target.value.trim())}
+                      placeholder={String(SUGGESTED_SLIPPAGE)}
+                    />
+                  </label>
+                  <label>
+                    Worst price
+                    <input readOnly value={check.price ?? '—'} title={`Best ${isBuy ? 'ask +' : 'bid −'} slippage`} />
+                  </label>
+                </>
+              )}
             <label>
               Contracts
               <input inputMode="numeric" value={size} onChange={(event) => setSize(event.target.value.trim())} placeholder="1" />
@@ -261,6 +275,16 @@ function OrderTicket({ network, master }: OrderTicketProps) {
               </label>
             )}
           </div>
+
+          {kind === 'market' && slippage !== String(SUGGESTED_SLIPPAGE) && (
+            <p className="order-ticket-dry">
+              Suggested slippage: {isBuy ? '+' : '−'}{SUGGESTED_SLIPPAGE} from the best {isBuy ? 'ask' : 'bid'}. You pay the
+              book&apos;s prices; slippage only caps how far a moving book may take you.{' '}
+              <button type="button" className="order-ticket-quote" onClick={() => setSlippage(String(SUGGESTED_SLIPPAGE))}>
+                Use {isBuy ? '+' : '−'}{SUGGESTED_SLIPPAGE}
+              </button>
+            </p>
+          )}
 
           <p className="order-ticket-funds">
             Available: {availableUsdc === null ? '…' : `${availableUsdc.toFixed(2)} USDC`} · You hold{' '}

@@ -119,6 +119,7 @@ class OutcomeMarket(BaseModel):
     )
     venue: str = ""
     sides: list[OutcomeSide]
+    
     # Contracts traded in the last 24h (HL dayBaseVlm). Total USDC 
     # traded across both sides of the outcome market. None when HL
     # reported no trading context
@@ -138,15 +139,26 @@ class OutcomeMarket(BaseModel):
     )
     # Side-0 book quality; None when there is no evidence either way
     book: BookSummary | None = None
+
     # "binary" = each sides settles to $1 or $0. Thus, a side's price
     # is a market-implied probablility. "scalar" = sides pay out 
     # proportionally (long/short on a price range). Prices != prob
     payout: PayoutKind = "binary"
+
     # Set when this market belongs to a multi-outcome question
     parent: QuestionRef | None = None
+
     # HL's own category for the market's template
     # e.g. "sports", "price", "culture". None when no template
     category: str | None = None
+
+    # The asset a price market is about: the spec's "perp" (templates such
+    # as binaryPrice, priceTouch) or "underlying" (Hyperliquid's recurring
+    # priceBinary / priceBucket), from the outcome or its question.
+    # HIP-3 assets keep their dex prefix, e.g. "xyz:GOLD" (Milestone 29.0).
+    # None for markets that are not about an asset's price.
+    underlying: str | None = None
+
     # Same-titled markets whose rules differ. Filled in by the snapshot
     # after normalization; empty when there are none.
     lookalikes: list[Lookalike] = Field(default_factory=list)

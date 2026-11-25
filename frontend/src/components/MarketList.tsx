@@ -3,12 +3,14 @@ import MarketCard from './MarketCard'
 import QuestionCard from './QuestionCard'
 
 interface MarketListProps {
+  title?: string // 29.0: the tab or page name; "Markets" by default
   entries: ListEntry[]
   selectedMarketId: string | null
   onSelect: (marketId: string) => void
 }
 
 function MarketList({
+  title = 'Markets',
   entries,
   selectedMarketId,
   onSelect,
@@ -19,7 +21,7 @@ function MarketList({
       aria-label="Outcome markets"
     >
       <div className="market-list-header">
-        <h2>Markets</h2>
+        <h2>{title}</h2>
         {/* Counts cards (decision 3), not outcomes. */}
         <span>{entries.length}</span>
       </div>

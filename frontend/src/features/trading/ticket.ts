@@ -28,6 +28,7 @@ export interface TicketInput {
   price: string  // limit orders only; a market order's price comes from the book
   size: string
   tif: TicketTif  // limit orders only; market orders are always IOC
+  slippage: string // market orders only: how far past the best price it may fill
 }
 
 export interface BookLevel {
@@ -63,10 +64,11 @@ const WHOLE = /^[1-9]\d*$/
 const MAX_PRICE_DECIMALS = 5
 export const MIN_ORDER_VALUE = 1    // 1 USDC
 
-// How far past the best price a market order may fill: 0.05, the same
-// ±0.05 band decided for mainnet (28). The SDK's default is 5% of the
-// mid; outcome prices are probabilities, so a fixed band is clearer.
-export const MARKET_SLIPPAGE = 0.05
+// How far past the best price a market order may fill. The user sets it
+// per order (28.0c); the ticket suggests 0.05, the same ±0.05 band
+// decided for mainnet (28). The SDK's default is 5% of the mid; outcome
+// prices are probabilities, so a band in price units is clearer.
+export const SUGGESTED_SLIPPAGE = 0.05
 const PRICE_UNITS = 100_000  // 5 decimals
 const MIN_PRICE_UNITS = 1  // 0.00001
 const MAX_PRICE_UNITS = PRICE_UNITS - 1  // 0.99999
@@ -83,7 +85,7 @@ function unitsToPrice(units: number): string {
 // The limit price of a market order: the best opposite price moved by
 // the slippage band, kept inside 0.00001 .. 0.99999. Null when the
 // opposite side of the book is empty (nothing to fill against).
-export function marketLimitPrice(book: BookTop, isBuy: boolean, slippage = MARKET_SLIPPAGE): string | null {
+export function marketLimitPrice(book: BookTop, isBuy: boolean, slippage = SUGGESTED_SLIPPAGE): string | null {
   const best = isBuy ? book.bestAsk : book.bestBid
   if (best === null) {
     return null
@@ -125,13 +127,24 @@ export function checkTicket(input: TicketInput, book: BookTop | null, funds: Fun
   const notes: string[] = []
   const market = input.kind === 'market'
 
-  // A market order's price is computed, so only the book can block it.
+  // A market order's price is computed from the book and the slippage.
   let priceText: string | null = null
+  let slippage: number | null = null
   if (market) {
+    const validSlippage = DECIMAL.test(input.slippage) && Number(input.slippage) > 0 && Number(input.slippage) < 1
+    if (input.slippage === '') {
+      errors.push(`Enter a slippage: how far past the best price this may fill (suggested ${SUGGESTED_SLIPPAGE}).`)
+    } else if (!validSlippage) {
+      errors.push(`Slippage must be a plain decimal between 0 and 1 (e.g. ${SUGGESTED_SLIPPAGE}).`)
+    } else if (priceDecimals(input.slippage) > MAX_PRICE_DECIMALS) {
+      errors.push(`Slippage can have at most ${MAX_PRICE_DECIMALS} decimals.`)
+    } else {
+      slippage = Number(input.slippage)
+    }
     if (book === null) {
       errors.push('Waiting for the book: a market order is priced from it.')
-    } else {
-      priceText = marketLimitPrice(book, input.isBuy)
+    } else if (slippage !== null) {
+      priceText = marketLimitPrice(book, input.isBuy, slippage)
       if (priceText === null) {
         errors.push(input.isBuy
           ? 'No asks to buy from: a market buy cannot fill. Use a limit order to rest a bid.'
@@ -192,8 +205,11 @@ export function checkTicket(input: TicketInput, book: BookTop | null, funds: Fun
     const best = input.isBuy ? book.bestAsk : book.bestBid
     const estimate = estimateFill(book, input.isBuy, size, price)
     notes.push(`Market ${input.isBuy ? 'buy' : 'sell'}: an IOC limit at ${priceText} `
-      + `(best ${input.isBuy ? 'ask' : 'bid'} ${best?.px} ${input.isBuy ? '+' : '-'} ${MARKET_SLIPPAGE}). `
-      + 'It never fills at a worse price, and never rests.')
+        + `(best ${input.isBuy ? 'ask' : 'bid'} ${best?.px} ${input.isBuy ? '+' : '-'} ${input.slippage}). `
+        + 'It never fills at a worse price, and never rests.')
+      if (slippage !== null && slippage > SUGGESTED_SLIPPAGE) {
+        notes.push(`Slippage ${input.slippage} is above the suggested ${SUGGESTED_SLIPPAGE}: on a thin book it can fill far from the best price.`)
+      }
     if (estimate.averagePx !== null) {
       notes.push(`The book now offers ${estimate.filled} of ${size} contracts by that price, `
         + `at an average of about ${showPx(estimate.averagePx)}.`)

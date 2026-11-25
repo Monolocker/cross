@@ -73,6 +73,9 @@ export interface OutcomeMarket {
     // Hyperliquid's category for the market's template, e.g. "sports"
     // Null when no template says
     category: string | null
+    // The asset a price market is about ("BTC"; HIP-3 assets keep their
+    // dex prefix, "xyz:GOLD"). Null when the market is not about a price.
+    underlying: string | null
     lookalikes: Lookalike[]
 }
 

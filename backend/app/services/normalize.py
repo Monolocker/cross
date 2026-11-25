@@ -647,6 +647,9 @@ def normalize_outcome(
                 else None
             )
         ),
+        # From the merged spec, so a priceBucket outcome ("index:1") gets
+        # its question's underlying.
+        underlying=values.get("perp") or values.get("underlying") or None,
     )
 
 

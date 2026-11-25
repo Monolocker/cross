@@ -29,7 +29,7 @@ function OpenOrders({ network, master, outcomes }: OpenOrdersProps) {
   async function cancel(asset: number, oid: number) {
     const agent = readAgent(network, master)
     if (agent === null) {
-      setMessage('Approve a trading key above to cancel.')
+      setMessage('Approve a trading key in Settings to cancel.')
       return
     }
     setBusyOid(oid)

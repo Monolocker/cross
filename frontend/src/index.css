@@ -2065,3 +2065,276 @@ button {
 .open-orders small {
   color: #666;
 }
+
+/* Milestone 29.0: landing page layout */
+
+.app-shell {
+  width: min(1400px, 100%);
+}
+
+.app-header {
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.brand {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 1rem;
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: 1.75rem;
+  letter-spacing: 0.12em;
+}
+
+.app-header .tagline {
+  margin: 0;
+  color: #555;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.nav-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.nav-tabs,
+.nav-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.nav-links {
+  margin-left: auto;
+}
+
+.nav-tab,
+.nav-star {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.nav-tab--active {
+  background: #1a1a1a;
+  border-color: #1a1a1a;
+  color: #fff;
+}
+
+.nav-star {
+  font-size: 1.1rem;
+  line-height: 1;
+  color: #b8860b;
+}
+
+.nav-star--active {
+  background: #fff4d6;
+  border-color: #b8860b;
+}
+
+.nav-count {
+  font-size: 0.75rem;
+  color: #888;
+}
+
+.nav-tab--active .nav-count {
+  color: #ccc;
+}
+
+.nav-search {
+  position: relative;
+  flex: 1 1 220px;
+  max-width: 360px;
+}
+
+.nav-search input {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 0.9rem;
+}
+
+.nav-search-results {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  z-index: 20;
+  width: min(480px, 90vw);
+  max-height: 420px;
+  overflow-y: auto;
+  padding: 0.25rem;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+}
+
+.nav-search-results ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nav-search-results button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  width: 100%;
+  padding: 0.45rem 0.5rem;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nav-search-results button:hover,
+.nav-search-results button:focus-visible {
+  background: #f2f2f2;
+}
+
+.nav-search-results small,
+.nav-search-empty {
+  color: #666;
+  font-size: 0.8rem;
+}
+
+.nav-search-empty {
+  margin: 0.35rem 0.5rem;
+}
+
+.detail-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.5rem;
+}
+
+.watch-button {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid #ccc;
+  border-radius: 999px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.watch-button span {
+  color: #b8860b;
+}
+
+.watch-button--on {
+  background: #fff4d6;
+  border-color: #b8860b;
+}
+
+.watchlist-unlisted {
+  margin: 0 0 0.75rem;
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.page-panel {
+  padding: 1.5rem;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+}
+
+.page-panel h2 {
+  margin-top: 0;
+}
+
+.page-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.page-heading h2 {
+  margin: 0;
+}
+
+.account-key-note {
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  background: #fff4d6;
+  font-size: 0.9rem;
+}
+
+/* The ticket and key panel sat at the top of the old page with spacing
+   for that spot; inside a page panel they start flush. */
+.account-page .order-ticket,
+.settings-page .trading-key {
+  margin: 1rem 0 0;
+}
+
+.history-section {
+  margin-top: 1.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #eee;
+}
+
+.history-table {
+  margin: 0.5rem 0;
+  overflow-x: auto;
+}
+
+.history-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.history-table th,
+.history-table td {
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid #f0f0f0;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.history-table th {
+  color: #666;
+  font-weight: 600;
+}
+
+.history-buy {
+  color: #1b7f3b;
+}
+
+.history-sell {
+  color: #b00020;
+}
+
+@media (max-width: 800px) {
+  .nav-links {
+    margin-left: 0;
+  }
+
+  .nav-search {
+    max-width: none;
+    flex-basis: 100%;
+  }
+}

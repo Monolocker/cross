@@ -16,7 +16,9 @@ const BID = { px: 0.55263, sz: 30 }
 const ASK = { px: 0.70526, sz: 22 }
 const BOOK: BookTop = { bestBid: BID, bestAsk: ASK, bids: [BID], asks: [ASK] }
 const FUNDS = { availableUsdc: 999.906338, heldContracts: 0 }
-const BUY: TicketInput = { outcomeId: 10219, side: 0, isBuy: true, kind: 'limit', price: '0.5', size: '10', tif: 'Gtc' }
+const BUY: TicketInput = {
+    outcomeId: 10219, side: 0, isBuy: true, kind: 'limit', price: '0.5', size: '10', tif: 'Gtc', slippage: '',
+  }
 
 describe('price and size rules', () => {
   it('accepts a valid order and builds the exact action', () => {
@@ -159,7 +161,7 @@ describe('market orders (28.0b)', () => {
     bids: [BID, { px: 0.5, sz: 10 }],
     asks: [ASK, { px: 0.72, sz: 10 }, { px: 0.8, sz: 100 }],
   }
-  const MARKET_BUY: TicketInput = { ...BUY, kind: 'market', price: '', size: '25' }
+  const MARKET_BUY: TicketInput = { ...BUY, kind: 'market', price: '', size: '25', slippage: '0.05' }
 
   it('prices a buy at the best ask + 0.05 and a sell at the best bid - 0.05, in 5 decimals', () => {
     expect(marketLimitPrice(DEEP, true)).toBe('0.75526')
@@ -231,5 +233,39 @@ describe('market orders (28.0b)', () => {
     expect(checkTicket(sell, tiny, { ...FUNDS, heldContracts: 4 }).errors).toEqual([])
     expect(checkTicket({ ...sell, size: '3' }, tiny, { ...FUNDS, heldContracts: 3 }).errors[0])
       .toMatch(/at least 1 USDC .*this one is 0.75 at its worst price 0.25/)
+  })
+})
+
+// Milestone 28.0c: the user chooses the slippage; 0.05 is only suggested.
+describe('adjustable slippage (28.0c)', () => {
+  const MARKET_BUY: TicketInput = { ...BUY, kind: 'market', price: '', size: '10', slippage: '0.05' }
+
+  it('requires a slippage, naming the suggestion', () => {
+    const check = checkTicket({ ...MARKET_BUY, slippage: '' }, BOOK, FUNDS)
+    expect(check.errors).toEqual(['Enter a slippage: how far past the best price this may fill (suggested 0.05).'])
+    expect(check.action).toBeNull()
+  })
+
+  it('rejects slippage outside (0, 1), malformed or with more than 5 decimals', () => {
+    for (const slippage of ['0', '1', '-0.01', '.05', 'x']) {
+      expect(checkTicket({ ...MARKET_BUY, slippage }, BOOK, FUNDS).errors[0]).toMatch(/between 0 and 1/)
+    }
+    expect(checkTicket({ ...MARKET_BUY, slippage: '0.000001' }, BOOK, FUNDS).errors[0]).toMatch(/at most 5 decimals/)
+  })
+
+  it('prices from the chosen slippage', () => {
+    const tight = checkTicket({ ...MARKET_BUY, slippage: '0.01' }, BOOK, FUNDS)
+    expect(tight.price).toBe('0.71526')
+    expect(tight.notes[0]).toMatch(/IOC limit at 0.71526 \(best ask 0.70526 \+ 0.01\)/)
+    const sell = checkTicket({ ...MARKET_BUY, isBuy: false, slippage: '0.00263' }, BOOK, { ...FUNDS, heldContracts: 10 })
+    expect(sell.action?.orders[0].p).toBe('0.55')
+  })
+
+  it('notes a slippage above the suggestion, without blocking it', () => {
+    const wide = checkTicket({ ...MARKET_BUY, slippage: '0.2' }, BOOK, FUNDS)
+    expect(wide.errors).toEqual([])
+    expect(wide.price).toBe('0.90526')
+    expect(wide.notes).toContain('Slippage 0.2 is above the suggested 0.05: on a thin book it can fill far from the best price.')
+    expect(checkTicket(MARKET_BUY, BOOK, FUNDS).notes.some((note) => note.includes('above the suggested'))).toBe(false)
   })
 })

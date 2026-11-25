@@ -1,41 +1,36 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { useMarketDetail, useMarkets } from "./api/queries"
+import AccountPage from "./components/AccountPage"
 import ActiveFilters, { type ActiveFilter } from "./components/ActiveFilters"
 import ChipFilter from "./components/ChipFilter"
 import CloseBucketFilter from "./components/CloseBucketFilter"
 import DeployerDirectory from "./components/DeployerDirectory"
+import FeedTicker from "./components/FeedTicker"
 import LeaderboardPanel from "./components/LeaderboardPanel"
 import LeaderboardTable from "./components/LeaderboardTable"
-import FeedTicker from './components/FeedTicker'
 import MarketDetail from "./components/MarketDetail"
 import MarketList from "./components/MarketList"
-import MarketSearch from "./components/MarketSearch"
 import MarketSort from "./components/MarketSort"
-import SidebarViewSwitch, {
-  type SidebarView,
-} from "./components/SidebarViewSwitch"
-import OrderTicket from "./components/OrderTicket"
+import NavBar, { type AppView } from "./components/NavBar"
+import SettingsPage from "./components/SettingsPage"
 import TraderDashboard from "./components/TraderDashboard"
-import TradingKeyPanel from "./components/TradingKeyPanel"
 import WalletButton from "./components/WalletButton"
+import WatchButton from "./components/WatchButton"
 import {
   CLOSE_FILTER_LABELS,
-  categoryLabel,
-  countByCategory,
   countByVenue,
   countCloseBuckets,
-  filterByCategory,
   filterByCloseBucket,
   filterByVenue,
-  listCategories,
   listVenues,
-  searchMarkets,
   sortEntries,
   venueLabel,
   type CloseFilter,
   type SortMode,
 } from "./features/markets/discovery"
 import { groupEntries } from "./features/markets/grouping"
+import { countByTab, filterByTab, MARKET_TABS, type MarketTab } from "./features/markets/tabs"
+import { useWatchlist } from "./features/markets/useWatchlist"
 import { readTraderLocation, traderHref } from "./features/trader/url"
 import { TESTNET } from "./features/trading/client"
 import { useWallet } from "./features/wallet/useWallet"
@@ -46,23 +41,26 @@ import type { LeaderboardWindow } from "./types/leaderboard"
 // a minute is far more precise than they need.
 const CLOCK_TICK_MS = 60_000
 
+// Milestone 29.0: the landing page. One header row (brand, wallet,
+// settings), the feed strip, one navigation row (watchlist, market tabs,
+// search, pages), then the current page. Markets, Watchlist and HIP-4
+// Deployers share the list + detail layout; Active Positions and
+// Settings are full-width pages.
 function App() {
   const [selectedMarketId, setSelectedMarketId] =
     useState<string | null>(null)
-  const [searchQuery, setSearchQuery] = useState("")
   const [closeFilter, setCloseFilter] = useState<CloseFilter>("all")
   const [sortMode, setSortMode] = useState<SortMode>("default")
   // null = all deployers; "" = markets with no venue.
   const [venueFilter, setVenueFilter] = useState<string | null>(null)
   // A shared ?trader= link opens straight into the Leaderboard view (26.3).
-  const [sidebarView, setSidebarView] = useState<SidebarView>(() =>
+  const [view, setView] = useState<AppView>(() =>
     readTraderLocation() !== null ? "leaderboard" : "markets",
   )
-  // null = all categories.
-  const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
-  // Leaderboard kept here, not inside the view, b/c sidebar and workspace 
+  const [tab, setTab] = useState<MarketTab>("trending")
+  // Leaderboard kept here, not inside the view, b/c sidebar and workspace
   // table both need it
-  const [leaderboardWindow, setLeaderboardWindow] = 
+  const [leaderboardWindow, setLeaderboardWindow] =
     useState<LeaderboardWindow>("7d")
   // The trader dashboard (26.3): which trader is open, and its window.
   // Both mirror the URL (?trader=0x…&window=30d), read once at start.
@@ -81,51 +79,49 @@ function App() {
       setSelectedTrader(location?.address ?? null)
       if (location !== null) {
         setTraderWindow(location.window)
-        setSidebarView("leaderboard")
+        setView("leaderboard")
       }
     }
     window.addEventListener("popstate", handlePopState)
     return () => window.removeEventListener("popstate", handlePopState)
   }, [])
- 
+
   const now = useNow(CLOCK_TICK_MS)
   const wallet = useWallet()
+  const watchlist = useWatchlist()
   const marketsQuery = useMarkets()
   const detailQuery = useMarketDetail(selectedMarketId)
 
   const markets = marketsQuery.data ?? []
 
   // Discovery pipeline, all derived on every render:
-  //   search -> category + deployer + time filters -> group -> sort
-  // Faceted counts: each chip group counts the markets that pass every
-  // OTHER active filter, so a chip's number is exactly how many markets
-  // you would see by clicking it. With three facets, each count set
-  // applies the two filters that are not its own.
-  const searchedMarkets = searchMarkets(markets, searchQuery)
-  const byCategory = filterByCategory(searchedMarkets, categoryFilter)
-  const byCategoryVenue = filterByVenue(byCategory, venueFilter)
-  const byCategoryTime = filterByCloseBucket(byCategory, closeFilter, now)
-  const byVenueTime = filterByCloseBucket(
-    filterByVenue(searchedMarkets, venueFilter),
-    closeFilter,
-    now,
-  )
-
-  const categoryCounts = countByCategory(byVenueTime)
-  const venueCounts = countByVenue(byCategoryTime)
-  const closeCounts = countCloseBuckets(byCategoryVenue, now)
+  //   tab -> deployer + time filters -> group -> sort
+  // Faceted counts: the deployer chips count markets that pass the time
+  // filter, and the time chips count markets that pass the deployer
+  // filter, both within the current tab.
+  const tabMarkets = filterByTab(markets, tab)
+  const byVenue = filterByVenue(tabMarkets, venueFilter)
+  const byTime = filterByCloseBucket(tabMarkets, closeFilter, now)
+  const venueCounts = countByVenue(byTime)
+  const closeCounts = countCloseBuckets(byVenue, now)
   // Chip order comes from the full list so it doesn't jump around.
-  const categories = listCategories(markets)
   const venues = listVenues(markets)
-
-  // Filters work on outcomes; then outcomes of the same question are
-  // grouped into one card, and the cards are sorted (Milestone 18.6b).
-  const visibleMarkets = filterByCloseBucket(byCategoryVenue, closeFilter, now)
+  // Trending is "every market by 24h volume", so it ignores the sort menu.
+  const effectiveSort: SortMode = tab === "trending" ? "trending" : sortMode
+  const visibleMarkets = filterByCloseBucket(byVenue, closeFilter, now)
   const entries = sortEntries(
     groupEntries(visibleMarkets, markets),
-    sortMode,
+    effectiveSort,
     now,
   )
+
+  // The watchlist, in the same card layout. Starred markets that have
+  // settled drop out of the live list; they are counted, not hidden.
+  const watchedMarkets = markets.filter((market) => watchlist.has(market.id))
+  const watchedEntries = sortEntries(groupEntries(watchedMarkets, markets), "default", now)
+  const unlistedWatched = marketsQuery.data === undefined
+    ? []
+    : watchlist.ids.filter((id) => !markets.some((market) => market.id === id))
 
   // Errors only matter when there is no data to show. A failed
   // background refetch keeps the last good data on screen.
@@ -142,24 +138,41 @@ function App() {
 
   // A market can settle and drop out of the refreshed list while it is
   // selected. The detail response is an OutcomeMarket too, so it keeps
-  // the panel populated.
-  // Looked up in the full list, not visibleMarkets: narrowing the
-  // search must not close the market currently being inspected.
+  // the panel populated. Looked up in the full list, so changing tabs
+  // never closes the market being inspected.
   const selectedMarket =
     markets.find((market) => market.id === selectedMarketId) ?? detail
+
+  // Leaving the leaderboard closes an open trader dashboard and its URL.
+  function closeTraderUrl() {
+    if (selectedTrader !== null) {
+      setSelectedTrader(null)
+      window.history.replaceState(null, "", traderHref(null))
+    }
+  }
+
+  function handleView(next: AppView) {
+    setView(next)
+    if (next !== "leaderboard") {
+      closeTraderUrl()
+    }
+  }
+
+  function handleTab(next: MarketTab) {
+    setTab(next)
+    handleView("markets")
+  }
 
   function handleSelectMarket(marketId: string) {
     setSelectedMarketId(marketId)
   }
 
-  // A trending item in the feed (24.3) opens its market from any view:
-  // in Deployers or Leaderboard the market detail would be hidden.
-  function handleOpenMarketFromFeed(marketId: string) {
-    setSidebarView("markets")
+  // Search, the feed and dashboards open a market in the detail panel.
+  // Pages without one (positions, settings, leaderboard) switch to Markets.
+  function openMarket(marketId: string) {
     setSelectedMarketId(marketId)
-    if (selectedTrader !== null) {
-      setSelectedTrader(null)
-      window.history.replaceState(null, "", traderHref(null))
+    if (view !== "markets" && view !== "watchlist" && view !== "deployers") {
+      handleView("markets")
     }
   }
 
@@ -175,7 +188,7 @@ function App() {
   // Your own account (27.2) is a trader dashboard like any other: the backend
   // serves it by address, so no new endpoint is needed
   function handleOpenMyDashboard(address: string) {
-    setSidebarView("leaderboard")
+    setView("leaderboard")
     handleOpenTrader(address)
   }
 
@@ -194,39 +207,16 @@ function App() {
   // A market in the dashboard opens in the Markets view; Back returns to
   // the dashboard, because the dashboard's URL is the previous entry.
   function handleOpenMarketFromTrader(marketId: string) {
-    setSidebarView("markets")
+    setView("markets")
     setSelectedMarketId(marketId)
     setSelectedTrader(null)
     window.history.pushState(null, "", traderHref(null))
   }
 
-  function handleSidebarViewChange(view: SidebarView) {
-    setSidebarView(view)
-    if (view !== "leaderboard" && selectedTrader !== null) {
-      setSelectedTrader(null)
-      window.history.replaceState(null, "", traderHref(null))
-    }
-  }
-
   // Every filter currently narrowing the list, each with its own way to
-  // undo it (Milestone 20.1d). Built from the same state the chips use,
-  // so the two can never disagree. Sort order is not a filter: it never
-  // hides a market, so it is not listed and not reset.
+  // undo it (Milestone 20.1d). The tab is not listed: it is always
+  // visible in the navigation row.
   const activeFilters: ActiveFilter[] = []
-  if (searchQuery.trim() !== "") {
-    activeFilters.push({
-      key: "search",
-      label: `Search: “${searchQuery.trim()}”`,
-      onRemove: () => setSearchQuery(""),
-    })
-  }
-  if (categoryFilter !== null) {
-    activeFilters.push({
-      key: "category",
-      label: `Category: ${categoryLabel(categoryFilter)}`,
-      onRemove: () => setCategoryFilter(null),
-    })
-  }
   if (venueFilter !== null) {
     activeFilters.push({
       key: "deployer",
@@ -242,25 +232,22 @@ function App() {
     })
   }
 
-  // Four state updates in one click handler are batched by React into a
-  // single re-render, so the list never flashes a half-reset state.
   function resetFilters() {
-    setSearchQuery("")
-    setCategoryFilter(null)
     setVenueFilter(null)
     setCloseFilter("all")
   }
-  
-  // Decision 1: choosing a deployer reuses the 17.4 deployer filter
-  // then shows the market list it now filters 
+
+  // Choosing a deployer reuses the 17.4 deployer filter, then shows the
+  // whole market list (Trending) it now filters.
   function handleSelectVenue(venue: string) {
     setVenueFilter(venue)
-    setSidebarView("markets")
+    setTab("trending")
+    setView("markets")
   }
 
   let workspaceTitle = "Select a market"
   let workspaceMessage =
-    "Choose a market from the list to inspect its details"
+    "Choose a market from the list, or search for one above, to inspect its details"
 
   if (marketsQuery.isPending) {
     workspaceTitle = "Loading markets"
@@ -270,130 +257,154 @@ function App() {
     workspaceMessage = listError
   }
 
+  const tabLabel = MARKET_TABS.find((item) => item.value === tab)?.label ?? "Markets"
+
+  // The detail panel used by Markets, Watchlist and HIP-4 Deployers.
+  const detailPanel =
+    selectedMarket !== null ? (
+      <>
+        <div className="detail-toolbar">
+          <WatchButton
+            watched={watchlist.has(selectedMarket.id)}
+            onToggle={() => watchlist.toggle(selectedMarket.id)}
+          />
+        </div>
+        <MarketDetail
+          market={selectedMarket}
+          detail={detail}
+          detailError={detailError}
+          onSelectMarket={handleSelectMarket}
+        />
+      </>
+    ) : (
+      <div className="market-detail-empty">
+        <h2>{workspaceTitle}</h2>
+        <p>{workspaceMessage}</p>
+      </div>
+    )
+
+  const marketStatus = marketsQuery.isPending ? (
+    <p className="request-status">Loading markets...</p>
+  ) : listError !== null ? (
+    <div className="request-status request-status--error">
+      <strong>Failed to load markets</strong>
+      <p>{listError}</p>
+    </div>
+  ) : null
+
+  let sidebar: ReactNode = null
+  let workspace: ReactNode = detailPanel
+  if (view === "markets") {
+    sidebar = marketStatus ?? (
+      <>
+        <div className="market-controls">
+          <ActiveFilters filters={activeFilters} onResetAll={resetFilters} />
+          <ChipFilter
+            label="Deployer"
+            options={venues}
+            counts={venueCounts}
+            totalCount={byTime.length}
+            value={venueFilter}
+            onChange={setVenueFilter}
+            formatLabel={venueLabel}
+          />
+          <CloseBucketFilter value={closeFilter} onChange={setCloseFilter} counts={closeCounts} />
+          {tab !== "trending" && <MarketSort value={sortMode} onChange={setSortMode} />}
+        </div>
+        <MarketList
+          title={tab === "trending" ? "Trending · 24h volume" : tabLabel}
+          entries={entries}
+          selectedMarketId={selectedMarketId}
+          onSelect={handleSelectMarket}
+        />
+      </>
+    )
+  } else if (view === "watchlist") {
+    sidebar = marketStatus ?? (
+      <>
+        {watchlist.ids.length === 0 && (
+          <p className="request-status">
+            No markets on your watchlist yet. Open a market and press “Add to watchlist”.
+          </p>
+        )}
+        {unlistedWatched.length > 0 && (
+          <p className="watchlist-unlisted">
+            {unlistedWatched.length} watched market{unlistedWatched.length === 1 ? " is" : "s are"} no
+            longer listed (settled or removed).{" "}
+            <button type="button" className="wallet-secondary" onClick={() => watchlist.remove(unlistedWatched)}>
+              Remove {unlistedWatched.length === 1 ? "it" : "them"}
+            </button>
+          </p>
+        )}
+        <MarketList
+          title="Watchlist"
+          entries={watchedEntries}
+          selectedMarketId={selectedMarketId}
+          onSelect={handleSelectMarket}
+        />
+      </>
+    )
+  } else if (view === "deployers") {
+    sidebar = <DeployerDirectory activeVenue={venueFilter} onSelectVenue={handleSelectVenue} />
+  } else if (view === "leaderboard") {
+    sidebar = <LeaderboardPanel timeWindow={leaderboardWindow} onWindowChange={setLeaderboardWindow} />
+    workspace =
+      selectedTrader !== null ? (
+        <TraderDashboard
+          address={selectedTrader}
+          timeWindow={traderWindow}
+          onWindowChange={handleTraderWindowChange}
+          onClose={handleCloseTrader}
+          onOpenMarket={handleOpenMarketFromTrader}
+        />
+      ) : (
+        <LeaderboardTable timeWindow={leaderboardWindow} onSelectTrader={handleOpenTrader} />
+      )
+  }
+
   return (
     <main className="app-shell">
       <header className="app-header">
-        <div>
-          <h1>Hyperliquid Outcomes</h1>
-          <p>Read-only outcome market terminal</p>
+        <div className="brand">
+          <h1>CROSS</h1>
+          <p className="tagline">Trade Predictions Across Hyperliquid, Polymarket, and Kalshi</p>
         </div>
-        <WalletButton wallet={wallet} onOpenDashboard={handleOpenMyDashboard} />
+        <div className="header-actions">
+          <WalletButton wallet={wallet} onOpenDashboard={handleOpenMyDashboard} />
+          <button
+            type="button"
+            className={view === "settings" ? "nav-tab nav-tab--active" : "nav-tab"}
+            aria-pressed={view === "settings"}
+            onClick={() => handleView("settings")}
+          >
+            Settings
+          </button>
+        </div>
       </header>
-      {/* Sibling keys must differ: TradingKeyPanel and OrderTicket both used key={wallet.address},
-          duplicate keys let React keep stale copies of the panel on every reconnect. The account
-          in each key still remounts both with fresh state */}
-      {wallet.address !== null && wallet.provider !== null && (
-        <TradingKeyPanel
-          key={`trading-key:${wallet.address}`}
-          network={TESTNET}
-          provider={wallet.provider}
-          master={wallet.address}
-          chainId={wallet.chainId}
-        />
+
+      <FeedTicker onSelectMarket={openMarket} />
+
+      <NavBar
+        view={view}
+        tab={tab}
+        tabCounts={marketsQuery.data === undefined ? null : countByTab(markets)}
+        watchCount={watchlist.ids.length}
+        markets={markets}
+        onView={handleView}
+        onTab={handleTab}
+        onSearchSelect={openMarket}
+      />
+
+      {view === "positions" ? (
+        <AccountPage network={TESTNET} master={wallet.address} onOpenSettings={() => handleView("settings")} />
+      ) : view === "settings" ? (
+        <SettingsPage network={TESTNET} wallet={wallet} />
+      ) : (
+        <div className="terminal-layout">
+          <aside className="market-sidebar">{sidebar}</aside>
+          <section className="market-workspace">{workspace}</section>
+        </div>
       )}
-      {wallet.address !== null && <OrderTicket key={wallet.address} network={TESTNET} master={wallet.address} />}
-      <FeedTicker onSelectMarket={handleOpenMarketFromFeed} />
-
-      <div className="terminal-layout">
-        <aside className="market-sidebar">
-          <SidebarViewSwitch value={sidebarView} onChange={handleSidebarViewChange} />
-
-          {sidebarView === "leaderboard" ? (
-            <LeaderboardPanel
-              timeWindow={leaderboardWindow}
-              onWindowChange={setLeaderboardWindow}
-            />
-          
-          ) : sidebarView === "deployers" ? (
-            <DeployerDirectory
-              activeVenue={venueFilter}
-              onSelectVenue={handleSelectVenue}
-              />
-          ) : marketsQuery.isPending ? (
-            <p className="request-status">Loading markets...</p>
-          ) : listError !== null ? (
-            <div className="request-status request-status--error">
-              <strong>Failed to load markets</strong>
-              <p>{listError}</p>
-            </div>
-          ) : (
-            <>
-              <div className="market-controls">
-                <ActiveFilters
-                  filters={activeFilters}
-                  onResetAll={resetFilters}
-                  />
-                <MarketSearch
-                  value={searchQuery}
-                  onChange={setSearchQuery}
-                  resultCount={searchedMarkets.length}
-                  totalCount={markets.length}
-                />
-                <ChipFilter
-                  label="Category"
-                  options={categories}
-                  counts={categoryCounts}
-                  totalCount={byVenueTime.length}
-                  value={categoryFilter}
-                  onChange={setCategoryFilter}
-                  formatLabel={categoryLabel}
-                />
-                <ChipFilter
-                  label="Deployer"
-                  options={venues}
-                  counts={venueCounts}
-                  totalCount={byCategoryTime.length}
-                  value={venueFilter}
-                  onChange={setVenueFilter}
-                  formatLabel={venueLabel}
-                />
-                <CloseBucketFilter
-                  value={closeFilter}
-                  onChange={setCloseFilter}
-                  counts={closeCounts}
-                />
-                <MarketSort value={sortMode} onChange={setSortMode} />
-              </div>
-              <MarketList
-                entries={entries}
-                selectedMarketId={selectedMarketId}
-                onSelect={handleSelectMarket}
-              />
-            </>
-          )}
-        </aside>
-
-        <section className="market-workspace">
-          {sidebarView === "leaderboard" ? (
-            selectedTrader !== null ? (
-              <TraderDashboard
-                address={selectedTrader}
-                timeWindow={traderWindow}
-                onWindowChange={handleTraderWindowChange}
-                onClose={handleCloseTrader}
-                onOpenMarket={handleOpenMarketFromTrader}
-              />
-            ) : (
-              <LeaderboardTable
-                timeWindow={leaderboardWindow}
-                onSelectTrader={handleOpenTrader}
-              />
-            )
-          ) : selectedMarket !== null ? (
-            <MarketDetail
-              market={selectedMarket}
-              detail={detail}
-              detailError={detailError}
-              onSelectMarket={handleSelectMarket}
-            />
-          ) : (
-            <div className="market-detail-empty">
-              <h2>{workspaceTitle}</h2>
-              <p>{workspaceMessage}</p>
-            </div>
-          )}
-        </section>
-      </div>
     </main>
   )
 }

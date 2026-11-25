@@ -10,12 +10,17 @@ interface PositionsProps {
   onClose: (position: OutcomePosition) => void  // fills the ticket; nothing is sent from here
 }
 
+// Position figures in 5 decimals, the precision of outcome prices (28.0c).
+function px(value: number | null | undefined): string {
+  return value === null || value === undefined ? '—' : value.toFixed(5)
+}
+
 function usdc(value: number | null): string {
-  return value === null ? '—' : `${value.toFixed(2)} USDC`
+  return value === null ? '—' : `${value.toFixed(5)} USDC`
 }
 
 function signedUsdc(value: number | null): string {
-  return value === null ? '—' : `${value >= 0 ? '+' : '−'}${Math.abs(value).toFixed(2)} USDC`
+  return value === null ? '—' : `${value >= 0 ? '+' : '−'}${Math.abs(value).toFixed(5)} USDC`
 }
 
 // Milestone 28.0b: the outcome contracts you hold on testnet. "Close"
@@ -37,15 +42,17 @@ function Positions({ network, master, outcomes, onClose }: PositionsProps) {
         <ul>
           {positions.data.map((position) => {
             const outcome = outcomes?.find((item) => item.id === position.outcomeId)
-            const { averageEntry, value, pnl } = positionValue(position, mids.data?.get(position.coin))
+            const mid = mids.data?.get(position.coin)
+            const { averageEntry, value, pnl } = positionValue(position, mid)
             const closable = outcome !== undefined && position.available > 0
             return (
               <li key={position.coin}>
                 <span>
                   {position.total} {outcome === undefined ? position.coin : `${outcome.sides[position.side]} · ${outcome.label}`}
                   {position.hold > 0 && ` (${position.hold} on hold for open sells)`}
-                  {' · '}avg {averageEntry === null ? '—' : Number(averageEntry.toFixed(5))}
-                  {' · '}value {usdc(value)} at mid
+                  {' · '}avg {px(averageEntry)}
+                  {' · '}mid {px(mid)}
+                  {' · '}value {usdc(value)}
                   {' · '}PnL {signedUsdc(pnl)}{' '}
                   <small>{position.coin}</small>
                 </span>

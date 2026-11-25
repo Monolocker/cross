@@ -1,6 +1,7 @@
 import { skipToken, useQuery, type QueryClient } from '@tanstack/react-query'
 import { fetchTestnetOutcomes } from '../../api/markets'
 import { postInfo, type Network } from './client'
+import { parseOutcomeFills, parseOutcomeOrderHistory } from './history'
 import { parseOpenOutcomeOrders } from './orders'
 import { outcomeMids, parseOutcomePositions } from './positions'
 import { outcomeVolumes, toTestnetOutcomes } from './testnetMarkets'
@@ -70,6 +71,23 @@ export function useOpenOutcomeOrders(network: Network, user: string) {
     queryKey: ['hyperliquid', network.name, 'frontendOpenOrders', user],
     queryFn: async () => parseOpenOutcomeOrders(await postInfo(network, { type: 'frontendOpenOrders', user })),
     refetchInterval: 5_000,
+  })
+}
+
+// Trade and order history (29.0): outcome entries only.
+export function useOutcomeFills(network: Network, user: string) {
+  return useQuery({
+    queryKey: ['hyperliquid', network.name, 'userFills', user],
+    queryFn: async () => parseOutcomeFills(await postInfo(network, { type: 'userFills', user })),
+    refetchInterval: 30_000,
+  })
+}
+
+export function useOutcomeOrderHistory(network: Network, user: string) {
+  return useQuery({
+    queryKey: ['hyperliquid', network.name, 'historicalOrders', user],
+    queryFn: async () => parseOutcomeOrderHistory(await postInfo(network, { type: 'historicalOrders', user })),
+    refetchInterval: 30_000,
   })
 }
 
