@@ -3,21 +3,23 @@ import { privateKeyToAccount } from 'viem/accounts'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Eip1193Provider } from '../wallet/eip1193'
 
-// Milestone 27.4: agent approval and checks, with a fake wallet and a
-// fake network (nothing here reaches Hyperliquid). The expected
-// signature for the named "cross" approval was produced by the official
-// Python SDK (commit 2fdb18f, sign_inner + user_signed_payload) with the
-// same key, agent, chain (0xa4b1) and nonce.
+// Milestones 27.4 and 28.0: agent approval and checks, with a fake
+// wallet and a fake network (nothing here reaches Hyperliquid). The
+// expected signature for the approval named
+// "cross valid_until <nonce + 24h>" was produced by the official Python
+// SDK (commit 2fdb18f, sign_inner + user_signed_payload) with the same
+// key, agent, chain (0xa4b1), nonce and name.
 const TEST_KEY = '0x0123456789012345678901234567890123456789012345678901234567890123'
 const AGENT_KEY: Hex = `0x${'11'.repeat(32)}`
 const wallet = privateKeyToAccount(TEST_KEY)
 const MASTER = wallet.address.toLowerCase()
 const AGENT = '0x19e7e376e7c213b7e7e7e46cc70a5dd086daff2a'
 const NONCE = 1763500000000
+const VALID_UNTIL = NONCE + 86_400_000  // 24 hours later
 const SDK_SIGNATURE = {
-  r: '0xb1f61b8fbd486e79de45d625f9575b6d21b9587470635f8c09abe8c91a9f4d76',
-  s: '0x1b6a82e00bc592cadcdd09cb589b06770ec36c3ce439d55607b92e38708cff8f',
-  v: 27,
+  r: '0xa6ee0b1a7fe7946588d9c92c58b80519a6c0711be1b8e0784c30b5b958906a08',
+  s: '0x20c7dd463ed0d88c23aff70c732e6a6022086b1cff2dabb82d3ab98f2f74285d',
+  v: 28,
 }
 
 // A wallet that signs eth_signTypedData_v4 with the test key, the way a
@@ -94,7 +96,7 @@ describe('approveAgent', () => {
         hyperliquidChain: 'Testnet',
         signatureChainId: '0xa4b1',
         agentAddress: AGENT,
-        agentName: 'cross',
+        agentName: 'cross valid_until 1763586400000',
         nonce: NONCE,
       },
       nonce: NONCE,
@@ -102,7 +104,7 @@ describe('approveAgent', () => {
       vaultAddress: null,
       expiresAfter: null,
     })
-    expect(stored).toEqual({ privateKey: AGENT_KEY, address: AGENT, name: 'cross', approvedAt: NONCE })
+    expect(stored).toEqual({ privateKey: AGENT_KEY, address: AGENT, name: 'cross', approvedAt: NONCE, validUntil: VALID_UNTIL })
   })
 
   it('gives the wallet standard EIP-712 JSON (domain type spelled out, nonce as a string)', async () => {
@@ -175,7 +177,7 @@ describe('agent checks', () => {
         data: { statuses: [{ error: 'Order was never placed, already canceled, or filled. asset=0' }] },
       },
     })
-    const agent = { privateKey: AGENT_KEY, address: AGENT as `0x${string}`, name: 'cross', approvedAt: 0 }
+    const agent = { privateKey: AGENT_KEY, address: AGENT as `0x${string}`, name: 'cross', approvedAt: 0, validUntil: VALID_UNTIL }
     expect(await testAgentWithCancel(TESTNET, agent)).toMatch(/accepted the signature/)
     const body = calls[0].body as { action: object; nonce: number; signature: { r: Hex; s: Hex; v: number } }
     expect(body.action).toEqual({ type: 'cancel', cancels: [{ a: 0, o: 1 }] })
@@ -187,7 +189,7 @@ describe('agent checks', () => {
 
   it('reports an unrecognized key and unexpected answers', async () => {
     const { testAgentWithCancel, TESTNET } = await load()
-    const agent = { privateKey: AGENT_KEY, address: AGENT as `0x${string}`, name: 'cross', approvedAt: 0 }
+    const agent = { privateKey: AGENT_KEY, address: AGENT as `0x${string}`, name: 'cross', approvedAt: 0, validUntil: VALID_UNTIL }
     fakeFetch({ status: 'err', response: `User or API Wallet ${AGENT} does not exist.` })
     await expect(testAgentWithCancel(TESTNET, agent)).rejects.toThrow('does not exist')
     fakeFetch({ status: 'ok', response: { type: 'cancel', data: { statuses: ['success'] } } })
@@ -196,12 +198,29 @@ describe('agent checks', () => {
 
   it('also accepts the bare text the docs show', async () => {
     const { testAgentWithCancel, TESTNET } = await load()
-    const agent = { privateKey: AGENT_KEY, address: AGENT as `0x${string}`, name: 'cross', approvedAt: 0 }
+    const agent = { privateKey: AGENT_KEY, address: AGENT as `0x${string}`, name: 'cross', approvedAt: 0, validUntil: VALID_UNTIL }
     fakeFetch({
       status: 'ok',
       response: { type: 'cancel', data: { statuses: [{ error: 'Order was never placed, already canceled, or filled.' }] } },
     })
     expect(await testAgentWithCancel(TESTNET, agent)).toMatch(/accepted the signature/)
+  })
+})
+
+describe('approved agents (28.0)', () => {
+  it('lists named agents from extraAgents, as the SDK queries it', async () => {
+    const { listAgents, TESTNET } = await load()
+    // Shape from the SDK's recorded response (tests/cassettes/info_test).
+    const calls = fakeFetch([
+      { name: 'cross', address: '0x286EDFA08C04F6899DAB3BFDECF2DD133F9733B9', validUntil: 1767776120478 },
+      { name: 'other', address: '0xc06e6617005c1888aeb8b3017fe00f82b7b84fc0' },
+      { name: 'broken' },
+    ])
+    expect(await listAgents(TESTNET, MASTER)).toEqual([
+      { name: 'cross', address: '0x286edfa08c04f6899dab3bfdecf2dd133f9733b9', validUntil: 1767776120478 },
+      { name: 'other', address: '0xc06e6617005c1888aeb8b3017fe00f82b7b84fc0', validUntil: null },
+    ])
+    expect(calls[0].body).toEqual({ type: 'extraAgents', user: MASTER })
   })
 })
 

@@ -41,7 +41,7 @@ function TradingKeyPanel({ network, provider, master, chainId }: TradingKeyPanel
         <>
           <p className="trading-key-note">
             Key <code title={agent.address}>{shortAddress(agent.address)}</code>, named “{agent.name}”, approved{' '}
-            {new Date(agent.approvedAt).toLocaleTimeString()}.
+            {new Date(agent.approvedAt).toLocaleTimeString()}, expires {new Date(agent.validUntil).toLocaleString()}.
           </p>
           <div className="trading-key-actions">
             <button type="button" disabled={busy} onClick={tradingKey.check}>
@@ -60,8 +60,8 @@ function TradingKeyPanel({ network, provider, master, chainId }: TradingKeyPanel
       {status === 'approving' && pendingAddress !== null && (
         <p className="trading-key-pending" role="status">
           Your wallet will ask you to sign <code>HyperliquidTransaction:ApproveAgent</code>. Check that it shows
-          hyperliquidChain <code>{network.name}</code>, agentName <code>cross</code> and agentAddress{' '}
-          <code>{pendingAddress}</code>.
+          hyperliquidChain <code>{network.name}</code>, agentName <code>cross valid_until …</code> (expiry in 24
+            hours) and agentAddress <code>{pendingAddress}</code>.
         </p>
       )}
       {(status === 'checking' || status === 'testing') && (

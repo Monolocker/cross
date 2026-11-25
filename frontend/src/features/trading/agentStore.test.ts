@@ -12,6 +12,7 @@ const AGENT: StoredAgent = {
   address: '0x19e7e376e7c213b7e7e7e46cc70a5dd086daff2a',
   name: 'cross',
   approvedAt: 1763500000000,
+  validUntil: 4102444800000,  // 2100-01-01: never expires during a test run
 }
 
 let store: Map<string, string>
@@ -69,6 +70,14 @@ describe('agent storage', () => {
     expect(readAgent(TESTNET, ALICE)).toBeNull()
     expect(writeAgent(TESTNET, ALICE, AGENT)).toBe(false)
     expect(() => removeAgent(TESTNET, ALICE)).not.toThrow()
+  })
+
+  it('drops an expired key, and keys saved before expiry existed (28.0)', () => {
+    store.set(`cross.agent.testnet.${ALICE}`, JSON.stringify({ ...AGENT, validUntil: Date.now() - 1 }))
+    expect(readAgent(TESTNET, ALICE)).toBeNull()
+    const { validUntil: _dropped, ...withoutExpiry } = AGENT
+    store.set(`cross.agent.testnet.${ALICE}`, JSON.stringify(withoutExpiry))
+    expect(readAgent(TESTNET, ALICE)).toBeNull()
   })
 
   it('removes the key', () => {

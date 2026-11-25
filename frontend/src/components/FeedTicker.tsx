@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react'
 import { useFeed } from '../api/queries'
 import type { FeedItem, FeedSourceStatus } from '../types/feed'
 import { formatTime } from '../utils/format'
+import { safeHref } from '../utils/url'
 
 // Scroll speed: each item gets about this long on screen. The duration
 // grows with the number of items, so the speed stays the same.
@@ -58,7 +59,10 @@ function FeedEntry({ item, duplicate, onSelectMarket }: FeedEntryProps) {
     )
   }
 
-  if (item.url === null) {
+  // The backend already drops non-http(s) links; checked again here
+  // because this page holds the trading key (28.0).
+  const href = safeHref(item.url)
+  if (href === null) {
     return null
   }
 
@@ -70,7 +74,7 @@ function FeedEntry({ item, duplicate, onSelectMarket }: FeedEntryProps) {
   return (
     <a
       className={`feed-item feed-item--${item.kind}`}
-      href={item.url}
+      href={href}
       target="_blank"
       rel="noopener noreferrer"
       tabIndex={tabIndex}

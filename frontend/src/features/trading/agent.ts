@@ -12,6 +12,11 @@ import { approveAgentTypedData, exchangeBody, signL1Action, splitSignature } fro
 // our previous agent, while an UNNAMED approval would replace whatever
 // unnamed agent another app uses on this account.
 export const AGENT_NAME = 'cross'
+// Approvals expire after 24 hours (decision 28, 4). The docs: "A custom
+// expiration can be set by appending valid_until {timestamp} after the
+// name", at most 180 days ahead. The timestamp is in ms, like the
+// validUntil that extraAgents reports.
+export const AGENT_TTL_MS = 24 * 60 * 60 * 1000
 
 // The docs show this text alone; live testnet appends details
 // (" asset=0"), so it matches as a prefix 
@@ -45,12 +50,14 @@ export async function approveAgent(request: ApproveRequest): Promise<StoredAgent
   const agentAddress = agent.address.toLowerCase() as `0x${string}`
   request.onAgentCreated?.(agentAddress)
 
+  const nonce = nextNonce()
+  const validUntil = nonce + AGENT_TTL_MS
   const action = approveAgentAction({
     agentAddress,
     isMainnet: request.network.isMainnet,
     signatureChainId: request.chainId,
-    nonce: nextNonce(),
-    agentName: AGENT_NAME,
+    nonce,
+    agentName: `${AGENT_NAME} valid_until ${validUntil}`,
   })
   const typedData = approveAgentTypedData(action)
   // A wallet takes typed data as JSON. The uint64 nonce is sent as a
@@ -75,7 +82,31 @@ export async function approveAgent(request: ApproveRequest): Promise<StoredAgent
   }
 
   await postExchange(request.network, exchangeBody(postedApproveAgent(action), action.nonce, splitSignature(signature)))
-  return { privateKey, address: agentAddress, name: AGENT_NAME, approvedAt: Date.now() }
+  return { privateKey, address: agentAddress, name: AGENT_NAME, approvedAt: Date.now(), validUntil }
+}
+
+export interface ApprovedAgent {
+  name: string
+  address: string  // lowercased
+  validUntil: number | null  // ms
+}
+
+// Every named agent approved for this account (info "extraAgents", as
+// the official SDK's Info.extra_agents queries it).
+export async function listAgents(network: Network, master: string): Promise<ApprovedAgent[]> {
+  const raw = await postInfo(network, { type: 'extraAgents', user: master })
+  const agents: ApprovedAgent[] = []
+  for (const item of Array.isArray(raw) ? raw : []) {
+    const agent = item as { name?: unknown; address?: unknown; validUntil?: unknown }
+    if (typeof agent.address === 'string') {
+      agents.push({
+        name: typeof agent.name === 'string' ? agent.name : '',
+        address: agent.address.toLowerCase(),
+        validUntil: typeof agent.validUntil === 'number' ? agent.validUntil : null,
+      })
+    }
+  }
+  return agents
 }
 
 // Asks Hyperliquid who this agent works for (info "userRole"). Returns

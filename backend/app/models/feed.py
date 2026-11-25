@@ -3,7 +3,9 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from urllib.parse import urlsplit
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # Interleaving order of the feed, one item of each kind in turn.
 FeedKind = Literal["news", "sports", "ticker", "trending"]
@@ -32,6 +34,20 @@ class FeedItem(BaseModel):
     )
     # trending: side-0 implied probability (binary markets only).
     probability: float | None = None
+
+    @field_validator("url")
+    @classmethod
+    def _http_only(cls, url: str | None) -> str | None:
+        """Keep only http(s) links with a host (Milestone 28.0).
+
+        Feed links come from outside (RSS). A "javascript:" or "data:"
+        link would run in our page, where the trading key lives, so any
+        other scheme is dropped and the item shows without a link.
+        """
+        if url is None:
+            return None
+        parts = urlsplit(url.strip())
+        return url.strip() if parts.scheme in ("http", "https") and parts.netloc else None
 
 
 class FeedSourceStatus(BaseModel):

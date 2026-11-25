@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import type { Eip1193Provider } from '../wallet/eip1193'
 import { walletErrorMessage } from '../wallet/eip1193'
-import { agentMaster, approveAgent, testAgentWithCancel } from './agent'
+import { agentMaster, approveAgent, listAgents, testAgentWithCancel } from './agent'
 import { readAgent, removeAgent, writeAgent, type StoredAgent } from './agentStore'
 import type { Network } from './client'
 
@@ -73,7 +73,16 @@ export function useTradingKey({ network, provider, master, chainId }: TradingKey
     run('checking', async () => {
       const approvedFor = await agentMaster(network, agent.address)
       if (approvedFor === master) {
-        setMessage(`${network.name} confirms this key trades for your account.`)
+        // Also list every named agent exactly as Hyperliquid stores it:
+        // the 28.0 test of whether "cross valid_until ..." still counts
+        // as the name "cross" (one entry after re-approving = it does).
+        const agents = await listAgents(network, master)
+        const listed = agents
+          .map((item) => `"${item.name}" ${item.address}${item.address === agent.address ? ' (this key)' : ''}`
+            + (item.validUntil === null ? '' : `, expires ${new Date(item.validUntil).toLocaleString()}`))
+          .join('; ')
+        setMessage(`${network.name} confirms this key trades for your account. `
+          + `Named agents: ${agents.length}${listed === '' ? '' : ` (${listed})`}.`)
       } else {
         throw new Error(approvedFor === null
           ? `${network.name} does not know this key as an agent (replaced or expired). Approve a new one.`

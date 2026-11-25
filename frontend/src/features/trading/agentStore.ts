@@ -12,6 +12,7 @@ export interface StoredAgent {
   address: `0x${string}`  // lowercased
   name: string
   approvedAt: number  // ms
+  validUntil: number // ms; Hyperliquid drops the approval after this 
 }
 
 const PRIVATE_KEY = /^0x[0-9a-f]{64}$/
@@ -37,7 +38,18 @@ export function readAgent(network: Network, master: string): StoredAgent | null 
     if (stored.address !== address || typeof stored.name !== 'string' || typeof stored.approvedAt !== 'number') {
       return null
     }
-    return { privateKey: stored.privateKey, address, name: stored.name, approvedAt: stored.approvedAt }
+    // An expired approval signs nothing Hyperliquid accepts: treat it as
+    // gone (keys saved before 28.0 have no expiry and are also dropped).
+    if (typeof stored.validUntil !== 'number' || stored.validUntil <= Date.now()) {
+        return null
+      }
+      return {
+        privateKey: stored.privateKey,
+        address,
+        name: stored.name,
+        approvedAt: stored.approvedAt,
+        validUntil: stored.validUntil,
+      }
   } catch {
     return null  // blocked storage or bad JSON: as if there were no key
   }

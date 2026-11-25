@@ -8,7 +8,7 @@ import { actionHash, l1TypedData } from './signing'
 // Milestone 27.6: sending orders and cancels, against a fake network.
 // Status shapes are the official docs' examples ("Exchange endpoint").
 const AGENT_KEY: Hex = `0x${'11'.repeat(32)}`
-const AGENT = { privateKey: AGENT_KEY, address: '0x19e7e376e7c213b7e7e7e46cc70a5dd086daff2a' as const, name: 'cross', approvedAt: 0 }
+const AGENT = { privateKey: AGENT_KEY, address: '0x19e7e376e7c213b7e7e7e46cc70a5dd086daff2a' as const, name: 'cross', approvedAt: 0, validUntil: 4102444800000 }
 const BUY = orderAction([limitOrder({ asset: 100_102_190, isBuy: true, price: '0.4', size: '2', tif: 'Gtc' })])
 
 function fakeFetch(answer: unknown) {
