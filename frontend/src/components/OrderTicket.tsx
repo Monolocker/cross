@@ -4,11 +4,13 @@ import type { OrderAction } from '../features/trading/actions'
 import { readAgent } from '../features/trading/agentStore'
 import type { Network } from '../features/trading/client'
 import { placeOrder } from '../features/trading/orders'
+import type { OutcomePosition } from '../features/trading/positions'
 import { refreshAfterTrade, useAvailableBalances, useBookTop, useOutcomeVolumes, useTestnetOutcomes } from '../features/trading/queries'
 import { searchOutcomes, trendingOutcomes } from '../features/trading/testnetMarkets'
-import { checkTicket, describeOrderResult, type TicketTif } from '../features/trading/ticket'
+import { checkTicket, describeOrderResult, MARKET_SLIPPAGE, type OrderKind, type TicketTif } from '../features/trading/ticket'
 import { walletErrorMessage } from '../features/wallet/eip1193'
 import OpenOrders from './OpenOrders'
+import Positions from './Positions'
 
 interface OrderTicketProps {
   network: Network
@@ -19,6 +21,8 @@ interface OrderTicketProps {
 // markets and balances straight from Hyperliquid, checks the order and
 // shows the exact action. Review, then Send: the trading key signs THAT
 // action and it goes to testnet. Testnet funds have no value.
+// 28.0b: market orders (an IOC limit priced from the book) and your
+// positions, whose Close button fills this ticket with a market sell.
 function OrderTicket({ network, master }: OrderTicketProps) {
   const queryClient = useQueryClient()
   const outcomes = useTestnetOutcomes()
@@ -29,6 +33,7 @@ function OrderTicket({ network, master }: OrderTicketProps) {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [side, setSide] = useState<0 | 1>(0)
   const [isBuy, setIsBuy] = useState(true)
+  const [kind, setKind] = useState<OrderKind>('limit')
   const [price, setPrice] = useState('')
   const [size, setSize] = useState('')
   const [tif, setTif] = useState<TicketTif>('Gtc')
@@ -58,13 +63,15 @@ function OrderTicket({ network, master }: OrderTicketProps) {
   const check = selected === null
     ? null
     : checkTicket(
-        { outcomeId: selected.id, side, isBuy, price, size, tif },
+        { outcomeId: selected.id, side, isBuy, kind, price, size, tif },
         book.data ?? null,
         { availableUsdc, heldContracts },
       )
 
   // The confirmation shows only while the inputs still build exactly the
-  // reviewed action, so what you confirm is what is signed.
+  // reviewed action, so what you confirm is what is signed. A market
+  // order's price follows the book: if the best price moves, the
+  // confirmation closes and the new price must be reviewed.
   const confirming = reviewed !== null && check !== null && check.action !== null
     && JSON.stringify(reviewed) === JSON.stringify(check.action)
 
@@ -81,14 +88,14 @@ function OrderTicket({ network, master }: OrderTicketProps) {
     setSendResult(null)
     setSendError(null)
     try {
-        const requested = reviewed.orders[0].s
-        const result = await placeOrder(network, agent, reviewed)
-        setSendResult(describeOrderResult(result, requested, network.name))
-        setReviewed(null)
-        if (result.kind !== 'error') {
-          setSize('')  // a stale size would raise errors against the new balance
-        }
-      } catch (exc) {
+      const requested = reviewed.orders[0].s
+      const result = await placeOrder(network, agent, reviewed)
+      setSendResult(describeOrderResult(result, requested, network.name))
+      setReviewed(null)
+      if (result.kind !== 'error') {
+        setSize('')  // a stale size would raise errors against the new balance
+      }
+    } catch (exc) {
       setSendError(walletErrorMessage(exc))
     } finally {
       setSending(false)
@@ -102,6 +109,28 @@ function OrderTicket({ network, master }: OrderTicketProps) {
     setSearching(false)
     setSide(0)
     setPrice('')
+  }
+
+  // Close: a market sell of everything not already held by open sells.
+  // It only fills the ticket; Review and Send still decide.
+  function closePosition(position: OutcomePosition) {
+    setSelectedId(position.outcomeId)
+    setSide(position.side)
+    setIsBuy(false)
+    setKind('market')
+    setSize(String(position.available))
+    setPrice('')
+    setReviewed(null)
+    setSendResult(null)
+    setSendError(null)
+  }
+
+  // Clicking a quote means "this price": a limit order.
+  function pickQuote(px: number | undefined) {
+    if (px !== undefined) {
+      setKind('limit')
+      setPrice(String(px))
+    }
   }
 
   function volumeLabel(id: number): string {
@@ -186,45 +215,57 @@ function OrderTicket({ network, master }: OrderTicketProps) {
             <span className="order-ticket-gap" />
             <button type="button" aria-pressed={isBuy} onClick={() => setIsBuy(true)}>Buy</button>
             <button type="button" aria-pressed={!isBuy} onClick={() => setIsBuy(false)}>Sell</button>
+            <span className="order-ticket-gap" />
+            <button type="button" aria-pressed={kind === 'limit'} onClick={() => setKind('limit')}>Limit</button>
+            <button type="button" aria-pressed={kind === 'market'} onClick={() => setKind('market')}>Market</button>
           </div>
 
           <p className="order-ticket-book">
             {selected.sides[side]} book:{' '}
             {book.data?.bestBid ? (
-              <button type="button" className="order-ticket-quote" onClick={() => setPrice(String(book.data?.bestBid?.px))}>
+              <button type="button" className="order-ticket-quote" onClick={() => pickQuote(book.data?.bestBid?.px)}>
                 bid {book.data.bestBid.px} × {book.data.bestBid.sz}
               </button>
             ) : 'no bids'}
             {' · '}
             {book.data?.bestAsk ? (
-              <button type="button" className="order-ticket-quote" onClick={() => setPrice(String(book.data?.bestAsk?.px))}>
+              <button type="button" className="order-ticket-quote" onClick={() => pickQuote(book.data?.bestAsk?.px)}>
                 ask {book.data.bestAsk.px} × {book.data.bestAsk.sz}
               </button>
             ) : 'no asks'}
           </p>
 
           <div className="order-ticket-row">
-            <label>
-              Price
-              <input inputMode="decimal" value={price} onChange={(event) => setPrice(event.target.value.trim())} placeholder="0.42" />
-            </label>
+            {kind === 'limit' ? (
+              <label>
+                Price
+                <input inputMode="decimal" value={price} onChange={(event) => setPrice(event.target.value.trim())} placeholder="0.42" />
+              </label>
+            ) : (
+              <label>
+                Worst price
+                <input readOnly value={check.price ?? '—'} title={`Best ${isBuy ? 'ask +' : 'bid -'} ${MARKET_SLIPPAGE}`} />
+              </label>
+            )}
             <label>
               Contracts
               <input inputMode="numeric" value={size} onChange={(event) => setSize(event.target.value.trim())} placeholder="1" />
             </label>
-            <label>
-              Time in force
-              <select value={tif} onChange={(event) => setTif(event.target.value as TicketTif)}>
-                <option value="Gtc">GTC: rest until filled or canceled</option>
-                <option value="Ioc">IOC: fill now or cancel</option>
-              </select>
-            </label>
+            {kind === 'limit' && (
+              <label>
+                Time in force
+                <select value={tif} onChange={(event) => setTif(event.target.value as TicketTif)}>
+                  <option value="Gtc">GTC: rest until filled or canceled</option>
+                  <option value="Ioc">IOC: fill now or cancel</option>
+                </select>
+              </label>
+            )}
           </div>
 
           <p className="order-ticket-funds">
             Available: {availableUsdc === null ? '…' : `${availableUsdc.toFixed(2)} USDC`} · You hold{' '}
             {heldContracts === null ? '…' : heldContracts} {selected.sides[side]} contracts
-            {check.notional !== null && ` · Order value ${check.notional.toFixed(2)} USDC`}
+            {check.notional !== null && ` · ${kind === 'market' ? 'Value at worst price' : 'Order value'} ${check.notional.toFixed(2)} USDC`}
           </p>
 
           {check.errors.length > 0 && (
@@ -252,9 +293,11 @@ function OrderTicket({ network, master }: OrderTicketProps) {
           {confirming && (
             <div className="order-ticket-confirm" role="group" aria-label="Confirm order">
               <p>
-                {isBuy ? 'Buy' : 'Sell'} <strong>{size}</strong> {selected.sides[side]} at <strong>{price}</strong>{' '}
-                ({tif === 'Gtc' ? 'GTC' : 'IOC'}) on <strong>{selected.label}</strong>, {network.name}.
-                {check.notional !== null && ` Order value ${check.notional.toFixed(2)} USDC.`}
+                {kind === 'market' ? `Market ${isBuy ? 'buy' : 'sell'}` : isBuy ? 'Buy' : 'Sell'} <strong>{size}</strong> {selected.sides[side]}{' '}
+                {kind === 'market' ? 'no worse than' : 'at'} <strong>{check.price}</strong>{' '}
+                ({kind === 'market' || tif === 'Ioc' ? 'IOC' : 'GTC'}) on <strong>{selected.label}</strong>, {network.name}.
+                {check.notional !== null && kind === 'market' && ` ${isBuy ? 'Costs at most' : 'Receives at least'} ${check.notional.toFixed(2)} USDC (before fees).`}
+                {check.notional !== null && kind === 'limit' && ` Order value ${check.notional.toFixed(2)} USDC.`}
               </p>
               <button type="button" disabled={sending} onClick={() => void send()}>
                 {sending ? 'Sending…' : `Send to ${network.name}`}
@@ -269,6 +312,7 @@ function OrderTicket({ network, master }: OrderTicketProps) {
         </div>
       )}
 
+      <Positions network={network} master={master} outcomes={outcomes.data} onClose={closePosition} />
       <OpenOrders network={network} master={master} outcomes={outcomes.data} />
     </section>
   )

@@ -16,6 +16,9 @@ export const AGENT_NAME = 'cross'
 // expiration can be set by appending valid_until {timestamp} after the
 // name", at most 180 days ahead. The timestamp is in ms, like the
 // validUntil that extraAgents reports.
+// Live testnet, 2026-11-25: extraAgents listed the agent as name
+// "cross" (suffix stripped) with our validUntil, and approving again
+// replaced it (still one agent, new address).
 export const AGENT_TTL_MS = 24 * 60 * 60 * 1000
 
 // The docs show this text alone; live testnet appends details

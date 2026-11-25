@@ -1,11 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import { availableBalances, bookTop, checkTicket, describeOrderResult, type TicketInput } from './ticket'
+import {
+    availableBalances,
+    bookTop,
+    checkTicket,
+    describeOrderResult,
+    estimateFill,
+    marketLimitPrice,
+    type BookTop,
+    type TicketInput,
+  } from './ticket'
 
 // Milestone 27.5: ticket rules. The book is #102190's from the 27.5
 // testnet probe: bid 0.55263 x 30, ask 0.70526 x 22.
-const BOOK = { bestBid: { px: 0.55263, sz: 30 }, bestAsk: { px: 0.70526, sz: 22 } }
+const BID = { px: 0.55263, sz: 30 }
+const ASK = { px: 0.70526, sz: 22 }
+const BOOK: BookTop = { bestBid: BID, bestAsk: ASK, bids: [BID], asks: [ASK] }
 const FUNDS = { availableUsdc: 999.906338, heldContracts: 0 }
-const BUY: TicketInput = { outcomeId: 10219, side: 0, isBuy: true, price: '0.5', size: '10', tif: 'Gtc' }
+const BUY: TicketInput = { outcomeId: 10219, side: 0, isBuy: true, kind: 'limit', price: '0.5', size: '10', tif: 'Gtc' }
 
 describe('price and size rules', () => {
   it('accepts a valid order and builds the exact action', () => {
@@ -90,7 +101,8 @@ describe('what would happen', () => {
 describe('parsers', () => {
   it('reads the top of an l2Book', () => {
     expect(bookTop({ levels: [[{ px: '0.55263', sz: '30.0' }], [{ px: '0.70526', sz: '22.0' }]] })).toEqual(BOOK)
-    expect(bookTop({ levels: [[{ px: '0.1', sz: '133.0' }], []] })).toEqual({ bestBid: { px: 0.1, sz: 133 }, bestAsk: null })
+    expect(bookTop({ levels: [[{ px: '0.1', sz: '133.0' }], []] }))
+      .toEqual({ bestBid: { px: 0.1, sz: 133 }, bestAsk: null, bids: [{ px: 0.1, sz: 133 }], asks: [] })
     expect(bookTop(null)).toBeNull()
   })
 
@@ -136,3 +148,88 @@ describe('live testnet answers (2026-11-23)', () => {
         .toBe('Hyperliquid rejected the order: Order must have minimum value of 1 USDC. asset=100102190')
     })
   })
+
+// Milestone 28.0b: a market order is an IOC limit priced from the book,
+// as the official SDK's market_open does ("an aggressive Limit Order IoC").
+describe('market orders (28.0b)', () => {
+  // A deeper book: three ask levels, two bid levels.
+  const DEEP: BookTop = {
+    bestBid: BID,
+    bestAsk: ASK,
+    bids: [BID, { px: 0.5, sz: 10 }],
+    asks: [ASK, { px: 0.72, sz: 10 }, { px: 0.8, sz: 100 }],
+  }
+  const MARKET_BUY: TicketInput = { ...BUY, kind: 'market', price: '', size: '25' }
+
+  it('prices a buy at the best ask + 0.05 and a sell at the best bid - 0.05, in 5 decimals', () => {
+    expect(marketLimitPrice(DEEP, true)).toBe('0.75526')
+    expect(marketLimitPrice(DEEP, false)).toBe('0.50263')
+    const round = { ...DEEP, bestAsk: { px: 0.7, sz: 1 }, bestBid: { px: 0.3, sz: 1 } }
+    expect(marketLimitPrice(round, true)).toBe('0.75')  // wire form, no float drift
+    expect(marketLimitPrice(round, false)).toBe('0.25')
+  })
+
+  it('keeps the price inside 0.00001 .. 0.99999', () => {
+    const edges = { ...DEEP, bestAsk: { px: 0.97, sz: 1 }, bestBid: { px: 0.02, sz: 1 } }
+    expect(marketLimitPrice(edges, true)).toBe('0.99999')
+    expect(marketLimitPrice(edges, false)).toBe('0.00001')
+  })
+
+  it('has no price without an opposite side', () => {
+    expect(marketLimitPrice({ ...DEEP, bestAsk: null, asks: [] }, true)).toBeNull()
+    expect(marketLimitPrice({ ...DEEP, bestBid: null, bids: [] }, false)).toBeNull()
+  })
+
+  it('estimates the fill by walking the book up to the limit', () => {
+    expect(estimateFill(DEEP, true, 25, 0.75526)).toEqual({ filled: 25, averagePx: (22 * 0.70526 + 3 * 0.72) / 25 })
+    expect(estimateFill(DEEP, true, 50, 0.75526).filled).toBe(32)  // 0.8 is past the limit
+    expect(estimateFill(DEEP, false, 35, 0.50263)).toEqual({ filled: 30, averagePx: 0.55263 })
+    expect(estimateFill({ ...DEEP, asks: [] }, true, 5, 0.9)).toEqual({ filled: 0, averagePx: null })
+  })
+
+  it('builds an IOC limit at the worst price and explains it', () => {
+    const check = checkTicket(MARKET_BUY, DEEP, FUNDS)
+    expect(check.errors).toEqual([])
+    expect(check.price).toBe('0.75526')
+    expect(check.notional).toBeCloseTo(25 * 0.75526)  // funds checked at the worst price
+    expect(check.action).toEqual({
+      type: 'order',
+      orders: [{ a: 100_102_190, b: true, p: '0.75526', s: '25', r: false, t: { limit: { tif: 'Ioc' } } }],
+      grouping: 'na',
+    })
+    expect(check.notes[0]).toMatch(/Market buy: an IOC limit at 0.75526 \(best ask 0.70526 \+ 0.05\)/)
+    expect(check.notes[1]).toMatch(/offers 25 of 25 contracts by that price, at an average of about 0.70703/)
+  })
+
+  it('ignores the price box and the TIF for a market order', () => {
+    const check = checkTicket({ ...MARKET_BUY, price: 'junk', tif: 'Gtc' }, DEEP, FUNDS)
+    expect(check.errors).toEqual([])
+    expect(check.action?.orders[0].t).toEqual({ limit: { tif: 'Ioc' } })
+  })
+
+  it('warns about the part the book cannot fill', () => {
+    const notes = checkTicket({ ...MARKET_BUY, size: '50' }, DEEP, FUNDS).notes
+    expect(notes).toContain('18 contracts are not offered by 0.75526: unless the book changes, they would be canceled.')
+  })
+
+  it('sells only contracts held, priced from the bids', () => {
+    const sell: TicketInput = { ...MARKET_BUY, isBuy: false, size: '30' }
+    expect(checkTicket(sell, DEEP, FUNDS).errors[0]).toMatch(/You hold 0 contracts/)
+    const check = checkTicket(sell, DEEP, { ...FUNDS, heldContracts: 30 })
+    expect(check.errors).toEqual([])
+    expect(check.action?.orders[0]).toMatchObject({ b: false, p: '0.50263', s: '30' })
+  })
+
+  it('blocks when the book is unknown or the opposite side is empty', () => {
+    expect(checkTicket(MARKET_BUY, null, FUNDS).errors).toEqual(['Waiting for the book: a market order is priced from it.'])
+    expect(checkTicket(MARKET_BUY, { ...DEEP, bestAsk: null, asks: [] }, FUNDS).errors[0]).toMatch(/No asks to buy from/)
+  })
+
+  it('applies the 1 USDC minimum at the worst price', () => {
+    const tiny = { ...DEEP, bestBid: { px: 0.3, sz: 10 }, bids: [{ px: 0.3, sz: 10 }] }
+    const sell: TicketInput = { ...MARKET_BUY, isBuy: false, size: '4' }  // 4 x 0.25 = 1.00: allowed
+    expect(checkTicket(sell, tiny, { ...FUNDS, heldContracts: 4 }).errors).toEqual([])
+    expect(checkTicket({ ...sell, size: '3' }, tiny, { ...FUNDS, heldContracts: 3 }).errors[0])
+      .toMatch(/at least 1 USDC .*this one is 0.75 at its worst price 0.25/)
+  })
+})
