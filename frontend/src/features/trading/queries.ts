@@ -3,9 +3,9 @@ import { fetchTestnetOutcomes } from '../../api/markets'
 import { postInfo, type Network } from './client'
 import { parseOutcomeFills, parseOutcomeOrderHistory } from './history'
 import { parseOpenOutcomeOrders } from './orders'
-import { outcomeMids, parseOutcomePositions } from './positions'
+import { outcomeMarks, parseOutcomePositions } from './positions'
 import { outcomeVolumes, toTestnetOutcomes } from './testnetMarkets'
-import { availableBalances, bookTop } from './ticket'
+import { availableBalances, bookTop, type BookTop } from './ticket'
 
 // Hyperliquid info queries made from the browser (Milestone 27.5),
 // cached by TanStack Query like the rest of the app's data.
@@ -37,16 +37,30 @@ export function useOutcomeVolumes(network: Network) {
   return useQuery({ ...spotContextsQuery(network), select: outcomeVolumes, staleTime: 60_000 })
 }
 
-// Mids for valuing positions, refreshed more often than the volumes.
-export function useOutcomeMids(network: Network) {
-  return useQuery({ ...spotContextsQuery(network), select: outcomeMids, refetchInterval: 15_000 })
+// Marks for valuing positions (29.1), refreshed more often than the volumes.
+export function useOutcomeMarks(network: Network) {
+  return useQuery({ ...spotContextsQuery(network), select: outcomeMarks, refetchInterval: 15_000 })
+}
+
+function bookQueryKey(network: Network, coin: string | null) {
+  return ['hyperliquid', network.name, 'l2Book', coin]
 }
 
 export function useBookTop(network: Network, coin: string | null) {
   return useQuery({
-    queryKey: ['hyperliquid', network.name, 'l2Book', coin],
+    queryKey: bookQueryKey(network, coin),
     queryFn: coin === null ? skipToken : async () => bookTop(await postInfo(network, { type: 'l2Book', coin })),
     refetchInterval: 5_000,
+  })
+}
+
+// A fresh book, fetched once on request (29.1: Sell / Close All price
+// from books fetched when you open the confirmation, then held still).
+export function fetchBookTop(queryClient: QueryClient, network: Network, coin: string): Promise<BookTop | null> {
+  return queryClient.fetchQuery({
+    queryKey: bookQueryKey(network, coin),
+    queryFn: async () => bookTop(await postInfo(network, { type: 'l2Book', coin })),
+    staleTime: 0,
   })
 }
 
@@ -92,9 +106,9 @@ export function useOutcomeOrderHistory(network: Network, user: string) {
 }
 
 // After an order or cancel: refetch what it changes (balances and
-// positions, open orders, books), not the market list.
+// positions, open orders, books, history), not the market list.
 export function refreshAfterTrade(queryClient: QueryClient, network: Network) {
-  for (const kind of ['spotClearinghouseState', 'frontendOpenOrders', 'l2Book']) {
+  for (const kind of ['spotClearinghouseState', 'frontendOpenOrders', 'l2Book', 'userFills', 'historicalOrders']) {
     void queryClient.invalidateQueries({ queryKey: ['hyperliquid', network.name, kind] })
   }
 }

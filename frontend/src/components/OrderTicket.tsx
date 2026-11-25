@@ -4,13 +4,10 @@ import type { OrderAction } from '../features/trading/actions'
 import { readAgent } from '../features/trading/agentStore'
 import type { Network } from '../features/trading/client'
 import { placeOrder } from '../features/trading/orders'
-import type { OutcomePosition } from '../features/trading/positions'
 import { refreshAfterTrade, useAvailableBalances, useBookTop, useOutcomeVolumes, useTestnetOutcomes } from '../features/trading/queries'
 import { searchOutcomes, trendingOutcomes } from '../features/trading/testnetMarkets'
 import { checkTicket, describeOrderResult, SUGGESTED_SLIPPAGE, type OrderKind, type TicketTif } from '../features/trading/ticket'
 import { walletErrorMessage } from '../features/wallet/eip1193'
-import OpenOrders from './OpenOrders'
-import Positions from './Positions'
 
 interface OrderTicketProps {
   network: Network
@@ -112,20 +109,6 @@ function OrderTicket({ network, master }: OrderTicketProps) {
     setSearching(false)
     setSide(0)
     setPrice('')
-  }
-
-  // Close: a market sell of everything not already held by open sells.
-  // It only fills the ticket; Review and Send still decide.
-  function closePosition(position: OutcomePosition) {
-    setSelectedId(position.outcomeId)
-    setSide(position.side)
-    setIsBuy(false)
-    setKind('market')
-    setSize(String(position.available))
-    setPrice('')
-    setReviewed(null)
-    setSendResult(null)
-    setSendError(null)
   }
 
   // Clicking a quote means "this price": a limit order.
@@ -336,9 +319,7 @@ function OrderTicket({ network, master }: OrderTicketProps) {
         </div>
       )}
 
-      <Positions network={network} master={master} outcomes={outcomes.data} onClose={closePosition} />
-      <OpenOrders network={network} master={master} outcomes={outcomes.data} />
-    </section>
+</section>
   )
 }
 

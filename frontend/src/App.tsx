@@ -237,6 +237,16 @@ function App() {
     setCloseFilter("all")
   }
 
+  // The CROSS brand (29.1) returns to the landing page as it first
+  // opens: Trending, no filters, no market open.
+  function handleHome() {
+    handleView("markets")
+    setTab("trending")
+    setSelectedMarketId(null)
+    resetFilters()
+    window.scrollTo({ top: 0 })
+  }
+
   // Choosing a deployer reuses the 17.4 deployer filter, then shows the
   // whole market list (Trending) it now filters.
   function handleSelectVenue(venue: string) {
@@ -366,7 +376,11 @@ function App() {
     <main className="app-shell">
       <header className="app-header">
         <div className="brand">
-          <h1>CROSS</h1>
+        <h1>
+            <button type="button" className="brand-button" onClick={handleHome} title="Back to the landing page">
+              CROSS
+            </button>
+          </h1>
           <p className="tagline">Trade Predictions Across Hyperliquid, Polymarket, and Kalshi</p>
         </div>
         <div className="header-actions">

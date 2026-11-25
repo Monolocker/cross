@@ -43,33 +43,46 @@ export function parseOutcomePositions(state: unknown): OutcomePosition[] {
   return positions.sort((a, b) => b.outcomeId - a.outcomeId || a.side - b.side)
 }
 
-// spotMetaAndAssetCtxs -> mid price per outcome coin. Outcome coins appear
-// there with "midPx" (M17.5 observation); midPx is null when a side has
-// no two-sided book, and then no value is shown rather than a guess.
-export function outcomeMids(response: unknown): Map<string, number> {
-  const contexts = Array.isArray(response) ? (response[1] as { coin?: unknown; midPx?: unknown }[]) : null
-  const mids = new Map<string, number>()
+// spotMetaAndAssetCtxs -> one price field per outcome coin. Outcome
+// coins appear there with "midPx" and "markPx" (M17.5 observation). A
+// null or missing price is left out, so no value is shown rather than a
+// guess.
+function contextPrices(response: unknown, field: 'midPx' | 'markPx'): Map<string, number> {
+  const contexts = Array.isArray(response) ? (response[1] as Record<string, unknown>[]) : null
+  const prices = new Map<string, number>()
   for (const context of Array.isArray(contexts) ? contexts : []) {
-    if (typeof context.coin !== 'string' || !/^#\d+$/.test(context.coin) || context.midPx === null || context.midPx === undefined) {
+    const raw = context[field]
+    if (typeof context.coin !== 'string' || !/^#\d+$/.test(context.coin) || raw === null || raw === undefined) {
       continue
     }
-    const mid = Number(context.midPx)
-    if (Number.isFinite(mid)) {
-      mids.set(context.coin, mid)
+    const price = Number(raw)
+    if (Number.isFinite(price)) {
+      prices.set(context.coin, price)
     }
   }
-  return mids
+  return prices
+}
+
+// midPx is null when a side has no two-sided book.
+export function outcomeMids(response: unknown): Map<string, number> {
+  return contextPrices(response, 'midPx')
+}
+
+// markPx: the Active positions page values positions at the mark, as
+// Hyperliquid's own positions table does (29.1).
+export function outcomeMarks(response: unknown): Map<string, number> {
+  return contextPrices(response, 'markPx')
 }
 
 export interface PositionValue {
   averageEntry: number | null  // entryNtl / total
-  value: number | null  // total x mid
+  value: number | null  // total x price (the mark on the Active positions page)
   pnl: number | null  // value - entryNtl, before the closing fee
 }
 
-export function positionValue(position: OutcomePosition, mid: number | undefined): PositionValue {
+export function positionValue(position: OutcomePosition, price: number | undefined): PositionValue {
   const averageEntry = position.entryNtl === null ? null : position.entryNtl / position.total
-  const value = mid === undefined ? null : position.total * mid
+  const value = price === undefined ? null : position.total * price
   const pnl = value === null || position.entryNtl === null ? null : value - position.entryNtl
   return { averageEntry, value, pnl }
 }
