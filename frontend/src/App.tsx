@@ -279,9 +279,12 @@ function App() {
         </div>
         <WalletButton wallet={wallet} onOpenDashboard={handleOpenMyDashboard} />
       </header>
+      {/* Sibling keys must differ: TradingKeyPanel and OrderTicket both used key={wallet.address},
+          duplicate keys let React keep stale copies of the panel on every reconnect. The account
+          in each key still remounts both with fresh state */}
       {wallet.address !== null && wallet.provider !== null && (
         <TradingKeyPanel
-          key={wallet.address}
+          key={`trading-key:${wallet.address}`}
           network={TESTNET}
           provider={wallet.provider}
           master={wallet.address}
@@ -289,7 +292,6 @@ function App() {
         />
       )}
       {wallet.address !== null && <OrderTicket key={wallet.address} network={TESTNET} master={wallet.address} />}
-
       <FeedTicker onSelectMarket={handleOpenMarketFromFeed} />
 
       <div className="terminal-layout">
